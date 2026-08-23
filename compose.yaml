@@ -153,6 +153,7 @@ services:
     restart: unless-stopped
     networks:
       - data
+      - clamav-egress
     expose:
       - "3310"
     volumes:
@@ -229,3 +230,5 @@ networks:
   data:
     name: blogops-data
     internal: true
+  clamav-egress:
+    name: blogops-clamav-egress
