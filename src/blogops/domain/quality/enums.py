@@ -1,0 +1,79 @@
+"""Stable vocabularies for quality reports and content approval."""
+
+from enum import StrEnum
+
+
+class ReportKind(StrEnum):
+    MORPHOLOGY = "MORPHOLOGY"
+    NATURALNESS = "NATURALNESS"
+    SEO = "SEO"
+    DUPLICATION = "DUPLICATION"
+    FACT_CITATION = "FACT_CITATION"
+    SAFETY_POLICY = "SAFETY_POLICY"
+
+
+class FindingSeverity(StrEnum):
+    INFO = "INFO"
+    WARN = "WARN"
+    BLOCK = "BLOCK"
+
+
+class PolicyLayer(StrEnum):
+    LAW = "LAW"
+    COPYRIGHT = "COPYRIGHT"
+    PLATFORM = "PLATFORM"
+    SERVICE = "SERVICE"
+    WORKSPACE = "WORKSPACE"
+    CONTENT = "CONTENT"
+
+
+class PolicyAction(StrEnum):
+    ALLOW = "ALLOW"
+    WARN = "WARN"
+    BLOCK = "BLOCK"
+
+
+class AssessmentDecision(StrEnum):
+    PASS = "PASS"
+    NEEDS_REVISION = "NEEDS_REVISION"
+    BLOCKED = "BLOCKED"
+
+
+class ApprovalRequestStatus(StrEnum):
+    PENDING = "PENDING"
+    CHANGES_REQUESTED = "CHANGES_REQUESTED"
+    REJECTED = "REJECTED"
+    APPROVED = "APPROVED"
+    EXPIRED = "EXPIRED"
+    INVALIDATED = "INVALIDATED"
+    SUPERSEDED = "SUPERSEDED"
+
+
+class ApprovalDecisionKind(StrEnum):
+    APPROVE = "APPROVE"
+    REJECT = "REJECT"
+    REQUEST_CHANGES = "REQUEST_CHANGES"
+
+
+class OverrideStatus(StrEnum):
+    ACTIVE = "ACTIVE"
+
+
+class CollaborationTarget(StrEnum):
+    REPORT = "REPORT"
+    ASSESSMENT = "ASSESSMENT"
+    APPROVAL_REQUEST = "APPROVAL_REQUEST"
+    POLICY_EVENT = "POLICY_EVENT"
+
+
+class ActivityKind(StrEnum):
+    RULE_SET_CREATED = "RULE_SET_CREATED"
+    CONFIG_CREATED = "CONFIG_CREATED"
+    REPORT_CREATED = "REPORT_CREATED"
+    ASSESSMENT_CREATED = "ASSESSMENT_CREATED"
+    POLICY_OVERRIDE_CREATED = "POLICY_OVERRIDE_CREATED"
+    APPROVAL_REQUESTED = "APPROVAL_REQUESTED"
+    APPROVAL_DECIDED = "APPROVAL_DECIDED"
+    APPROVAL_INVALIDATED = "APPROVAL_INVALIDATED"
+    COMMENT_CREATED = "COMMENT_CREATED"
+    COMMENT_RESOLVED = "COMMENT_RESOLVED"

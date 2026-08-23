@@ -62,6 +62,11 @@ from blogops.domain.jobs.state import (
     StepState,
     ensure_job_transition,
 )
+from blogops.domain.quality.references import (
+    SQLAlchemyActiveMembershipResolver,
+    SQLAlchemyContentVersionResolver,
+)
+from blogops.domain.quality.service import QualityService
 from blogops.services.audit import append_audit_log
 from blogops.services.outbox import add_outbox_event
 
@@ -86,6 +91,11 @@ class GenerationService:
         self.session = session
         self.snapshots = snapshots
         self.budget = budget
+        self.quality = QualityService(
+            session,
+            contents=SQLAlchemyContentVersionResolver(session),
+            memberships=SQLAlchemyActiveMembershipResolver(session),
+        )
 
     async def create_job(
         self,
@@ -373,6 +383,21 @@ class GenerationService:
         if content.lock_version != data.expected_lock_version:
             raise _lock_conflict(data.expected_lock_version, content.lock_version)
         fields = data.model_fields_set.difference({"expected_lock_version", "archived"})
+        if (
+            "title" in fields
+            and data.title != content.title
+            and content.current_version_id is not None
+        ):
+            raise AppError(
+                code="CONTENT_TITLE_VERSION_REQUIRED",
+                message="본문이 있는 콘텐츠의 제목은 새 콘텐츠 버전으로 변경해야 합니다.",
+                status_code=409,
+                remediation={"endpoint": f"/v1/content/{content.id}/versions"},
+            )
+        approval_context_changed = any(
+            name in fields and getattr(data, name) != getattr(content, name)
+            for name in ("channel", "metadata_json")
+        )
         for name in fields:
             value = getattr(data, name)
             if name == "tags" and value is not None:
@@ -382,6 +407,17 @@ class GenerationService:
             content.archived_at = datetime.now(UTC) if data.archived else None
         content.updated_by = principal.subject_id
         await self.session.flush()
+        if approval_context_changed and content.current_version_id is not None:
+            current = await self.get_version(
+                principal, content.id, content.current_version_id
+            )
+            await self._invalidate_approvals(
+                principal,
+                content,
+                current,
+                reason="승인에 영향을 주는 채널 또는 콘텐츠 메타데이터가 변경됨",
+                force=True,
+            )
         await append_audit_log(
             self.session,
             workspace_id=principal.workspace_id,
@@ -472,6 +508,13 @@ class GenerationService:
         content.current_version_id = version.id
         content.title = version.title
         content.updated_by = principal.subject_id
+        await self._invalidate_approvals(
+            principal,
+            content,
+            version,
+            reason="새 콘텐츠 버전이 생성됨",
+            force=False,
+        )
         await self._version_event(principal, content, version, "content.version.created")
         return version
 
@@ -500,6 +543,13 @@ class GenerationService:
         content.current_version_id = version.id
         content.title = version.title
         content.updated_by = principal.subject_id
+        await self._invalidate_approvals(
+            principal,
+            content,
+            version,
+            reason="콘텐츠 버전이 복원되어 승인 대상이 변경됨",
+            force=False,
+        )
         await self._version_event(principal, content, version, "content.version.restored")
         return version
 
@@ -821,6 +871,13 @@ class GenerationService:
             ensure_job_transition(current, JobState.WAITING_REVIEW)
             job.state = JobState.WAITING_REVIEW.value
         job.result = {**(job.result or {}), "content_version_id": str(version.id)}
+        await self._invalidate_approvals(
+            principal,
+            content,
+            version,
+            reason="새 생성 결과가 현재 콘텐츠 버전을 대체함",
+            force=False,
+        )
         await self.session.flush()
         return version
 
@@ -1075,6 +1132,25 @@ class GenerationService:
                 status_code=409,
             )
         return current
+
+    async def _invalidate_approvals(
+        self,
+        principal: Principal,
+        content: ContentItem,
+        version: ContentVersion,
+        *,
+        reason: str,
+        force: bool,
+    ) -> None:
+        await self.session.flush()
+        await self.quality.invalidate_approvals_for_content_change(
+            principal,
+            content.id,
+            new_content_version_id=version.id,
+            new_content_hash=version.content_hash,
+            reason=reason,
+            force=force,
+        )
 
     async def _job(
         self, workspace_id: UUID, job_id: UUID, *, for_update: bool = False
