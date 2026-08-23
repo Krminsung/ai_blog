@@ -112,8 +112,13 @@ class QualityReport(UUIDPrimaryKeyMixin, Base):
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
-            ["workspace_id", "content_version_id"],
-            ["content_versions.workspace_id", "content_versions.id"],
+            ["workspace_id", "content_version_id", "content_hash"],
+            [
+                "content_versions.workspace_id",
+                "content_versions.id",
+                "content_versions.content_hash",
+            ],
+            name="fk_quality_report_exact_content_version",
             ondelete="RESTRICT",
         ),
         UniqueConstraint(
@@ -384,8 +389,13 @@ class QualityAssessment(UUIDPrimaryKeyMixin, Base):
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
-            ["workspace_id", "content_version_id"],
-            ["content_versions.workspace_id", "content_versions.id"],
+            ["workspace_id", "content_version_id", "content_hash"],
+            [
+                "content_versions.workspace_id",
+                "content_versions.id",
+                "content_versions.content_hash",
+            ],
+            name="fk_quality_assessment_exact_content_version",
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
@@ -478,8 +488,13 @@ class PolicyEvent(UUIDPrimaryKeyMixin, Base):
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
-            ["workspace_id", "content_version_id"],
-            ["content_versions.workspace_id", "content_versions.id"],
+            ["workspace_id", "content_version_id", "content_hash"],
+            [
+                "content_versions.workspace_id",
+                "content_versions.id",
+                "content_versions.content_hash",
+            ],
+            name="fk_policy_event_exact_content_version",
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
@@ -568,14 +583,26 @@ class ApprovalRequest(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
-            ["workspace_id", "approved_content_version_id"],
-            ["content_versions.workspace_id", "content_versions.id"],
+            [
+                "workspace_id",
+                "approved_content_version_id",
+                "approved_content_hash",
+            ],
+            [
+                "content_versions.workspace_id",
+                "content_versions.id",
+                "content_versions.content_hash",
+            ],
             name="fk_approval_request_approved_version",
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
-            ["workspace_id", "content_version_id"],
-            ["content_versions.workspace_id", "content_versions.id"],
+            ["workspace_id", "content_version_id", "content_hash"],
+            [
+                "content_versions.workspace_id",
+                "content_versions.id",
+                "content_versions.content_hash",
+            ],
             name="fk_approval_request_content_version",
             ondelete="RESTRICT",
         ),
@@ -648,8 +675,13 @@ class ApprovalDecision(UUIDPrimaryKeyMixin, Base):
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
-            ["workspace_id", "content_version_id"],
-            ["content_versions.workspace_id", "content_versions.id"],
+            ["workspace_id", "content_version_id", "content_hash"],
+            [
+                "content_versions.workspace_id",
+                "content_versions.id",
+                "content_versions.content_hash",
+            ],
+            name="fk_approval_decision_exact_content_version",
             ondelete="RESTRICT",
         ),
         UniqueConstraint(
@@ -693,8 +725,13 @@ class ApprovalStateEvent(UUIDPrimaryKeyMixin, Base):
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
-            ["workspace_id", "content_version_id"],
-            ["content_versions.workspace_id", "content_versions.id"],
+            ["workspace_id", "content_version_id", "content_hash"],
+            [
+                "content_versions.workspace_id",
+                "content_versions.id",
+                "content_versions.content_hash",
+            ],
+            name="fk_approval_state_event_exact_content_version",
             ondelete="RESTRICT",
         ),
         Index(

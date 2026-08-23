@@ -666,6 +666,12 @@ class ContentVersion(UUIDPrimaryKeyMixin, Base):
     __tablename__ = "content_versions"
     __table_args__ = (
         UniqueConstraint("workspace_id", "id", name="content_version_workspace_id"),
+        UniqueConstraint(
+            "workspace_id",
+            "id",
+            "content_hash",
+            name="content_version_workspace_id_hash",
+        ),
         ForeignKeyConstraint(
             ["workspace_id", "content_id"],
             ["contents.workspace_id", "contents.id"],

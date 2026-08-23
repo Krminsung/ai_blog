@@ -264,6 +264,11 @@ def test_quality_models_pin_tenant_content_version_and_hash() -> None:
         assert {"workspace_id", "content_version_id", "content_hash"}.issubset(
             model.__table__.columns.keys()
         )
+        assert any(
+            set(constraint.column_keys)
+            == {"workspace_id", "content_version_id", "content_hash"}
+            for constraint in model.__table__.foreign_key_constraints
+        )
     assert "citation_link_rate" in FactCitationReport.__table__.columns
 
 
