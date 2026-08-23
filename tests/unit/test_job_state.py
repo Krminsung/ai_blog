@@ -18,7 +18,7 @@ def test_expected_generation_path_is_allowed() -> None:
         JobState.APPROVED,
         JobState.SUCCEEDED,
     ]
-    for current, target in zip(path, path[1:], strict=True):
+    for current, target in zip(path[:-1], path[1:], strict=True):
         ensure_job_transition(current, target)
 
 
