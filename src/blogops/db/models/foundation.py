@@ -21,11 +21,20 @@ class IdempotencyStatus(StrEnum):
 class IdempotencyRecord(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "idempotency_records"
     __table_args__ = (
-        UniqueConstraint("namespace", "operation", "key", name="idempotency_identity"),
+        UniqueConstraint(
+            "workspace_id",
+            "actor_id",
+            "namespace",
+            "operation",
+            "key",
+            name="idempotency_identity",
+            postgresql_nulls_not_distinct=True,
+        ),
         Index("ix_idempotency_records_expires_at", "expires_at"),
     )
 
     workspace_id: Mapped[UUID | None] = mapped_column(index=True)
+    actor_id: Mapped[UUID | None] = mapped_column(index=True)
     namespace: Mapped[str] = mapped_column(String(128), nullable=False)
     operation: Mapped[str] = mapped_column(String(128), nullable=False)
     key: Mapped[str] = mapped_column(String(255), nullable=False)

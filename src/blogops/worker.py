@@ -18,5 +18,8 @@ celery_app.conf.update(
     task_track_started=True,
     broker_connection_retry_on_startup=True,
     result_expires=86_400,
-    imports=("blogops.domain.knowledge.tasks",),
+    imports=(
+        "blogops.domain.knowledge.tasks",
+        "blogops.domain.keywords.tasks",
+    ),
 )

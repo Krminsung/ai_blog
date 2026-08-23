@@ -2634,6 +2634,13 @@ def _default_roles() -> dict[str, tuple[str, list[str]]]:
                 Permission.BRAND_WRITE.value,
                 Permission.KNOWLEDGE_READ.value,
                 Permission.KNOWLEDGE_WRITE.value,
+                Permission.KEYWORD_READ.value,
+                Permission.KEYWORD_WRITE.value,
+                Permission.KEYWORD_EXPORT.value,
+                Permission.PLANNING_READ.value,
+                Permission.PLANNING_WRITE.value,
+                Permission.PLANNING_APPROVE.value,
+                Permission.PLANNING_EXPORT.value,
                 Permission.CONTENT_READ.value,
                 Permission.CONTENT_WRITE.value,
                 Permission.CONTENT_APPROVE.value,
@@ -2646,6 +2653,8 @@ def _default_roles() -> dict[str, tuple[str, list[str]]]:
                 Permission.BRAND_READ.value,
                 Permission.KNOWLEDGE_READ.value,
                 Permission.KNOWLEDGE_WRITE.value,
+                Permission.KEYWORD_READ.value,
+                Permission.PLANNING_READ.value,
                 Permission.CONTENT_READ.value,
                 Permission.CONTENT_WRITE.value,
             ],
@@ -2656,18 +2665,41 @@ def _default_roles() -> dict[str, tuple[str, list[str]]]:
             + [
                 Permission.BRAND_READ.value,
                 Permission.KNOWLEDGE_READ.value,
+                Permission.KEYWORD_READ.value,
+                Permission.PLANNING_READ.value,
                 Permission.CONTENT_READ.value,
             ],
         ),
         "approver": (
             "Approver",
-            read + [Permission.CONTENT_READ.value, Permission.CONTENT_APPROVE.value],
+            read
+            + [
+                Permission.KEYWORD_READ.value,
+                Permission.PLANNING_READ.value,
+                Permission.PLANNING_APPROVE.value,
+                Permission.CONTENT_READ.value,
+                Permission.CONTENT_APPROVE.value,
+            ],
         ),
         "publisher": (
             "Publisher",
-            read + [Permission.CONTENT_READ.value, Permission.CONTENT_PUBLISH.value],
+            read
+            + [
+                Permission.KEYWORD_READ.value,
+                Permission.PLANNING_READ.value,
+                Permission.CONTENT_READ.value,
+                Permission.CONTENT_PUBLISH.value,
+            ],
         ),
-        "analyst": ("Analyst", read + [Permission.CONTENT_READ.value]),
+        "analyst": (
+            "Analyst",
+            read
+            + [
+                Permission.KEYWORD_READ.value,
+                Permission.PLANNING_READ.value,
+                Permission.CONTENT_READ.value,
+            ],
+        ),
         "billing": ("Billing", read + [Permission.BILLING_READ.value]),
         "developer": ("Developer", read + [Permission.API_MANAGE.value]),
         "viewer": (
@@ -2676,6 +2708,8 @@ def _default_roles() -> dict[str, tuple[str, list[str]]]:
             + [
                 Permission.BRAND_READ.value,
                 Permission.KNOWLEDGE_READ.value,
+                Permission.KEYWORD_READ.value,
+                Permission.PLANNING_READ.value,
                 Permission.CONTENT_READ.value,
             ],
         ),

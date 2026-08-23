@@ -43,6 +43,7 @@ async def reserve(
     key: str,
     request_hash: str,
     workspace_id: UUID | None,
+    actor_id: UUID | None = None,
 ) -> Reservation:
     settings = get_settings()
     now = datetime.now(UTC)
@@ -52,6 +53,7 @@ async def reserve(
         .values(
             id=candidate_id,
             workspace_id=workspace_id,
+            actor_id=actor_id,
             namespace=namespace,
             operation=operation,
             key=key,
@@ -65,6 +67,8 @@ async def reserve(
     record = await session.scalar(
         select(IdempotencyRecord)
         .where(
+            IdempotencyRecord.workspace_id == workspace_id,
+            IdempotencyRecord.actor_id == actor_id,
             IdempotencyRecord.namespace == namespace,
             IdempotencyRecord.operation == operation,
             IdempotencyRecord.key == key,
