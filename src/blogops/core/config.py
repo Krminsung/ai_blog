@@ -42,6 +42,20 @@ class Settings(BaseSettings):
     redis_health_timeout_seconds: float = 1.0
     dependency_health_timeout_seconds: float = 2.0
 
+    s3_endpoint_url: str = "http://object-storage:9000"
+    s3_region: str = "us-east-1"
+    s3_bucket: str = "blogops"
+    s3_access_key_id: SecretStr | None = None
+    s3_secret_access_key: SecretStr | None = None
+    knowledge_max_upload_bytes: int = 25 * 1024 * 1024
+    knowledge_presign_ttl_seconds: int = 900
+    knowledge_fetch_max_bytes: int = 10 * 1024 * 1024
+    knowledge_fetch_timeout_seconds: float = 15.0
+    knowledge_fetch_max_redirects: int = 5
+    clamav_host: str = "clamav"
+    clamav_port: int = 3310
+    clamav_timeout_seconds: float = 20.0
+
     secret_key: SecretStr = SecretStr("local-development-key-change-me")
     allowed_hosts: str = "localhost,127.0.0.1"
     cors_origins: str = ""

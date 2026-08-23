@@ -1,17 +1,5 @@
-"""Persistence model registry imported by Alembic."""
+"""Identity, authentication and multi-tenant organization domain."""
 
-from blogops.db.models.foundation import AuditLog, IdempotencyRecord, OutboxEvent
-from blogops.domain.brand.models import (
-    AudiencePersona,
-    Brand,
-    BrandVersion,
-    Product,
-    ProductAsset,
-    ProductLink,
-    ProductPrice,
-    ProductVariant,
-    ProductVersion,
-)
 from blogops.domain.identity.models import (
     Agency,
     AgencyClient,
@@ -35,46 +23,22 @@ from blogops.domain.identity.models import (
     WorkspaceAuthenticationPolicy,
     WorkspaceInvitation,
 )
-from blogops.domain.knowledge.models import (
-    KnowledgeJob,
-    KnowledgeSource,
-    SourceChunk,
-    SourceDocument,
-    SourceVersion,
-)
 
 __all__ = [
     "Agency",
     "AgencyClient",
-    "AudiencePersona",
-    "AuditLog",
     "AuthenticationChallenge",
-    "Brand",
-    "BrandVersion",
     "ExternalIdentity",
     "FederatedProviderConnection",
-    "IdempotencyRecord",
-    "KnowledgeJob",
-    "KnowledgeSource",
     "LoginSession",
-    "Membership",
     "MFAFactor",
     "MFARecoveryCode",
+    "Membership",
     "OneTimeToken",
-    "OutboxEvent",
-    "Product",
-    "ProductAsset",
-    "ProductLink",
-    "ProductPrice",
-    "ProductVariant",
-    "ProductVersion",
     "Role",
     "SCIMConfiguration",
     "SCIMResourceLink",
     "SessionRefreshToken",
-    "SourceChunk",
-    "SourceDocument",
-    "SourceVersion",
     "TermsConsent",
     "TermsDocumentVersion",
     "User",

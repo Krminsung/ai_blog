@@ -1,0 +1,70 @@
+from enum import StrEnum
+
+
+class SourceType(StrEnum):
+    URL = "URL"
+    FILE = "FILE"
+    TEXT = "TEXT"
+    FAQ = "FAQ"
+    API = "API"
+    SITEMAP = "SITEMAP"
+    RSS = "RSS"
+    YOUTUBE_TRANSCRIPT = "YOUTUBE_TRANSCRIPT"
+    PRODUCT_FEED = "PRODUCT_FEED"
+    CMS = "CMS"
+
+
+class SourceState(StrEnum):
+    CREATED = "CREATED"
+    UPLOADING = "UPLOADING"
+    QUEUED = "QUEUED"
+    FETCHING = "FETCHING"
+    SCANNING = "SCANNING"
+    PARSING = "PARSING"
+    INDEXING = "INDEXING"
+    READY = "READY"
+    NEEDS_REVIEW = "NEEDS_REVIEW"
+    FAILED = "FAILED"
+    PERMISSION_EXPIRED = "PERMISSION_EXPIRED"
+    DELETING = "DELETING"
+    DELETED = "DELETED"
+
+
+class RightsStatus(StrEnum):
+    OWNED = "OWNED"
+    LICENSED = "LICENSED"
+    PERMISSION_GRANTED = "PERMISSION_GRANTED"
+    PUBLIC_DOMAIN = "PUBLIC_DOMAIN"
+    UNCONFIRMED = "UNCONFIRMED"
+    PROHIBITED = "PROHIBITED"
+
+
+class UseScope(StrEnum):
+    INTERNAL_ONLY = "INTERNAL_ONLY"
+    GENERATION_ALLOWED = "GENERATION_ALLOWED"
+    CITATION_ALLOWED = "CITATION_ALLOWED"
+
+
+class SourceQualityGrade(StrEnum):
+    A = "A"
+    B = "B"
+    C = "C"
+    D = "D"
+
+
+class KnowledgeJobType(StrEnum):
+    FETCH = "FETCH"
+    PARSE = "PARSE"
+    REINDEX = "REINDEX"
+    DELETE = "DELETE"
+
+
+class KnowledgeJobState(StrEnum):
+    QUEUED = "QUEUED"
+    RUNNING = "RUNNING"
+    WAITING_EXTERNAL = "WAITING_EXTERNAL"
+    NEEDS_REVIEW = "NEEDS_REVIEW"
+    SUCCEEDED = "SUCCEEDED"
+    RETRYABLE_FAILED = "RETRYABLE_FAILED"
+    FINAL_FAILED = "FINAL_FAILED"
+    CANCELLED = "CANCELLED"

@@ -4,7 +4,7 @@ BlogOps AI는 근거 기반 콘텐츠 생성, 품질 검수, 승인, 공식 채�
 통합하는 멀티테넌트 SaaS의 백엔드입니다. 이 저장소에는 프론트엔드나 브라우저 확장
 코드가 포함되지 않습니다.
 
-현재 `1-backend-foundation` 단계는 다음 공통 기반을 제공합니다.
+현재 `2-tenancy-auth-knowledge` 단계까지 다음 백엔드 기반을 제공합니다.
 
 - FastAPI 애플리케이션과 버전이 있는 `/v1` API 경계
 - PostgreSQL/pgvector, Redis, Celery 기반 실행 환경
@@ -13,6 +13,11 @@ BlogOps AI는 근거 기반 콘텐츠 생성, 품질 검수, 승인, 공식 채�
 - PostgreSQL RLS, 멱등성 레코드, Transactional Outbox, 불변 감사 로그
 - 명시적인 장기 작업 상태 전이 규칙
 - liveness/readiness와 Prometheus/OpenTelemetry 관측성 진입점
+- Argon2id 인증, 회전 Refresh Token, TOTP MFA, 세션·기기 관리
+- Workspace/Membership/Role, 대행사 계층과 PostgreSQL 테넌트 격리
+- 불변 브랜드·상품 스냅샷, 페르소나, 가격·권리·제휴 고지
+- 파일·URL 지식 수집, 악성코드 검사, 파싱·PII 마스킹·청킹·임베딩
+- MinIO 원본 버전과 위치 계보, 권한 기반 하이브리드 지식 검색
 
 전체 백엔드 범위와 단계는 `ai_blog_automation_service_plan.md`와
 `ai_blog_automation_function_spec.md`를 정본으로 삼습니다.

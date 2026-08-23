@@ -2,8 +2,10 @@
 
 from collections.abc import AsyncIterator
 from functools import lru_cache
+from typing import Annotated
 from uuid import UUID
 
+from fastapi import Depends
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -13,6 +15,8 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from blogops.core.config import get_settings
+from blogops.core.context import Principal
+from blogops.core.permissions import get_principal
 
 
 class Database:
@@ -64,3 +68,14 @@ async def apply_workspace_scope(session: AsyncSession, workspace_id: UUID) -> No
         text("SELECT set_config('app.current_workspace_id', :workspace_id, true)"),
         {"workspace_id": str(workspace_id)},
     )
+
+
+async def get_tenant_session(
+    principal: Annotated[Principal, Depends(get_principal)],
+) -> AsyncIterator[AsyncSession]:
+    """Open a transaction whose PostgreSQL RLS context matches the verified principal."""
+    database = get_database()
+    async with database.session_factory() as session:
+        async with session.begin():
+            await apply_workspace_scope(session, principal.workspace_id)
+            yield session
