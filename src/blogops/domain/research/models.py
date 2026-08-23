@@ -319,11 +319,13 @@ class ClaimDecision(UUIDPrimaryKeyMixin, Base):
         ForeignKeyConstraint(
             ["workspace_id", "claim_id"],
             ["claims.workspace_id", "claims.id"],
+            name="fk_claim_decision_claim",
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
             ["workspace_id", "replacement_claim_id"],
             ["claims.workspace_id", "claims.id"],
+            name="fk_claim_decision_replacement",
             ondelete="RESTRICT",
         ),
         Index("ix_claim_decisions_claim", "workspace_id", "claim_id", "created_at"),

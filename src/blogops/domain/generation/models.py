@@ -528,6 +528,7 @@ class GenerationJobStep(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ForeignKeyConstraint(
             ["workspace_id", "partial_content_version_id"],
             ["content_versions.workspace_id", "content_versions.id"],
+            name="fk_generation_step_partial_version",
             ondelete="RESTRICT",
             use_alter=True,
         ),
@@ -673,16 +674,19 @@ class ContentVersion(UUIDPrimaryKeyMixin, Base):
         ForeignKeyConstraint(
             ["workspace_id", "parent_version_id"],
             ["content_versions.workspace_id", "content_versions.id"],
+            name="fk_content_version_parent",
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
             ["workspace_id", "restored_from_version_id"],
             ["content_versions.workspace_id", "content_versions.id"],
+            name="fk_content_version_restored",
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
             ["workspace_id", "generation_job_id"],
             ["generation_jobs.workspace_id", "generation_jobs.id"],
+            name="fk_content_version_generation_job",
             ondelete="RESTRICT",
             use_alter=True,
         ),
@@ -760,11 +764,13 @@ class ContentLineage(UUIDPrimaryKeyMixin, Base):
         ForeignKeyConstraint(
             ["workspace_id", "parent_content_version_id"],
             ["content_versions.workspace_id", "content_versions.id"],
+            name="fk_content_lineage_parent",
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
             ["workspace_id", "child_content_version_id"],
             ["content_versions.workspace_id", "content_versions.id"],
+            name="fk_content_lineage_child",
             ondelete="RESTRICT",
         ),
         UniqueConstraint(
