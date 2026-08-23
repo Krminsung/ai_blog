@@ -1,0 +1,93 @@
+"""Stable publishing vocabularies; parent jobs always use the shared JobState."""
+
+from enum import StrEnum
+
+
+class PublishingProvider(StrEnum):
+    WORDPRESS = "WORDPRESS"
+    GHOST = "GHOST"
+    BLOGGER = "BLOGGER"
+    CUSTOMER_CMS = "CUSTOMER_CMS"
+    NAVER_MANUAL = "NAVER_MANUAL"
+
+
+class ConnectionState(StrEnum):
+    PENDING = "PENDING"
+    ACTIVE = "ACTIVE"
+    DEGRADED = "DEGRADED"
+    EXPIRED = "EXPIRED"
+    DISCONNECTED = "DISCONNECTED"
+
+
+class ConnectionOperation(StrEnum):
+    DIAGNOSE = "DIAGNOSE"
+    REFRESH = "REFRESH"
+    SYNC_SETTINGS = "SYNC_SETTINGS"
+    DISCONNECT = "DISCONNECT"
+
+
+class PublishOperation(StrEnum):
+    CREATE = "CREATE"
+    UPDATE = "UPDATE"
+    DELETE = "DELETE"
+    RECONCILE = "RECONCILE"
+    ROLLBACK = "ROLLBACK"
+
+
+class PublishVisibility(StrEnum):
+    DRAFT = "DRAFT"
+    PUBLISH = "PUBLISH"
+    SCHEDULED = "SCHEDULED"
+    PENDING_REVIEW = "PENDING_REVIEW"
+    PRIVATE = "PRIVATE"
+
+
+class PublishedPostState(StrEnum):
+    DRAFT = "DRAFT"
+    SCHEDULED = "SCHEDULED"
+    PUBLISHED = "PUBLISHED"
+    PARTIAL = "PARTIAL"
+    CONFLICT = "CONFLICT"
+    TRASHED = "TRASHED"
+    DELETED = "DELETED"
+    REMOTE_MISSING = "REMOTE_MISSING"
+    MANUALLY_CONFIRMED = "MANUALLY_CONFIRMED"
+
+
+class ConflictAction(StrEnum):
+    ABORT = "ABORT"
+    OVERWRITE = "OVERWRITE"
+    IMPORT_REMOTE = "IMPORT_REMOTE"
+
+
+class RetryClass(StrEnum):
+    NETWORK = "NETWORK"
+    RATE_LIMIT = "RATE_LIMIT"
+    SERVER = "SERVER"
+    FINAL = "FINAL"
+
+
+class SagaStepKind(StrEnum):
+    VALIDATE_READINESS = "VALIDATE_READINESS"
+    RESERVE_QUOTA = "RESERVE_QUOTA"
+    FETCH_REMOTE = "FETCH_REMOTE"
+    SNAPSHOT_REMOTE = "SNAPSHOT_REMOTE"
+    UPLOAD_MEDIA = "UPLOAD_MEDIA"
+    UPSERT_TAXONOMY = "UPSERT_TAXONOMY"
+    WRITE_POST = "WRITE_POST"
+    VERIFY_REMOTE = "VERIFY_REMOTE"
+    RECONCILE = "RECONCILE"
+    ROLLBACK = "ROLLBACK"
+    CANCEL_REMOTE = "CANCEL_REMOTE"
+    NOTIFY = "NOTIFY"
+
+
+class NaverPackageState(StrEnum):
+    READY = "READY"
+    CONFIRMED = "CONFIRMED"
+    SUPERSEDED = "SUPERSEDED"
+
+
+class NaverChecklistState(StrEnum):
+    CHECKED = "CHECKED"
+    UNCHECKED = "UNCHECKED"

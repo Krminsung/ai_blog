@@ -1,0 +1,133 @@
+"""Stable analytics vocabulary from ANL-001 through ANL-040."""
+
+from enum import StrEnum
+
+
+class AnalyticsProvider(StrEnum):
+    GOOGLE_SEARCH_CONSOLE = "GOOGLE_SEARCH_CONSOLE"
+    GOOGLE_ANALYTICS = "GOOGLE_ANALYTICS"
+    WORDPRESS = "WORDPRESS"
+    GHOST = "GHOST"
+    BLOGGER = "BLOGGER"
+
+
+class AnalyticsConnectionState(StrEnum):
+    PENDING = "PENDING"
+    ACTIVE = "ACTIVE"
+    DEGRADED = "DEGRADED"
+    EXPIRED = "EXPIRED"
+    DISCONNECTED = "DISCONNECTED"
+
+
+class MetricSubject(StrEnum):
+    CONTENT = "CONTENT"
+    CHANNEL = "CHANNEL"
+    QUERY = "QUERY"
+    PRODUCTION = "PRODUCTION"
+    QUALITY = "QUALITY"
+    COST = "COST"
+
+
+class MetricValueKind(StrEnum):
+    OBSERVED = "OBSERVED"
+    DERIVED = "DERIVED"
+    ESTIMATED = "ESTIMATED"
+    CONFIRMED = "CONFIRMED"
+
+
+class OperationalMetricKind(StrEnum):
+    PRODUCTION_TIME = "PRODUCTION_TIME"
+    GENERATION_TIME = "GENERATION_TIME"
+    REVISION_COUNT = "REVISION_COUNT"
+    QUALITY_SCORE = "QUALITY_SCORE"
+    CITATION_COVERAGE = "CITATION_COVERAGE"
+    REJECTION_RATE = "REJECTION_RATE"
+    GENERATION_COST = "GENERATION_COST"
+    FAILURE_RATE = "FAILURE_RATE"
+    TEMPLATE_PERFORMANCE = "TEMPLATE_PERFORMANCE"
+
+
+class ComparisonKind(StrEnum):
+    COHORT = "COHORT"
+    CHANNEL = "CHANNEL"
+    CONTENT_UPDATE = "CONTENT_UPDATE"
+    ATTRIBUTION = "ATTRIBUTION"
+
+
+class EvidenceKind(StrEnum):
+    OFFICIAL_API = "OFFICIAL_API"
+    WEBHOOK = "WEBHOOK"
+    CSV = "CSV"
+    MANUAL = "MANUAL"
+    INTERNAL_LEDGER = "INTERNAL_LEDGER"
+
+
+class ConversionSource(StrEnum):
+    WEBHOOK = "WEBHOOK"
+    GOOGLE_ANALYTICS = "GOOGLE_ANALYTICS"
+    CMS = "CMS"
+    CSV = "CSV"
+    MANUAL = "MANUAL"
+    TRACKING_LINK = "TRACKING_LINK"
+
+
+class AttributionModel(StrEnum):
+    FIRST = "FIRST"
+    LAST = "LAST"
+    DIRECT = "DIRECT"
+
+
+class RecommendationKind(StrEnum):
+    STALE_CONTENT = "STALE_CONTENT"
+    PERFORMANCE_DECLINE = "PERFORMANCE_DECLINE"
+    CONTENT_GAP = "CONTENT_GAP"
+    INTERNAL_LINK = "INTERNAL_LINK"
+    MERGE_SPLIT = "MERGE_SPLIT"
+    TITLE_DESCRIPTION = "TITLE_DESCRIPTION"
+
+
+class RecommendationDecisionKind(StrEnum):
+    ACCEPT = "ACCEPT"
+    DISMISS = "DISMISS"
+    DEFER = "DEFER"
+
+
+class ExperimentKind(StrEnum):
+    TITLE = "TITLE"
+    THUMBNAIL = "THUMBNAIL"
+    CTA = "CTA"
+    INTRODUCTION = "INTRODUCTION"
+    CONTENT_LENGTH = "CONTENT_LENGTH"
+    IMAGE_COUNT = "IMAGE_COUNT"
+    PUBLISH_TIME = "PUBLISH_TIME"
+
+
+class ExperimentState(StrEnum):
+    DRAFT = "DRAFT"
+    RUNNING = "RUNNING"
+    STOPPED = "STOPPED"
+    COMPLETED = "COMPLETED"
+    CANCELLED = "CANCELLED"
+
+
+class ReportCadence(StrEnum):
+    DAILY = "DAILY"
+    WEEKLY = "WEEKLY"
+    MONTHLY = "MONTHLY"
+
+
+class ReportFormat(StrEnum):
+    CSV = "CSV"
+    PDF = "PDF"
+    JSON = "JSON"
+
+
+class AnalyticsJobOperation(StrEnum):
+    SYNC = "SYNC"
+    REPORT = "REPORT"
+    EXPORT = "EXPORT"
+
+
+class AnalyticsCommandKind(StrEnum):
+    CANCEL = "CANCEL"
+    RETRY = "RETRY"

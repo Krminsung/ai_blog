@@ -13,6 +13,14 @@ from blogops.core.context import Principal
 from blogops.core.errors import AppError
 from blogops.core.permissions import Permission, get_principal
 from blogops.db.session import get_tenant_session
+from blogops.domain.analytics.enums import AnalyticsCommandKind
+from blogops.domain.analytics.models import AnalyticsReportRun, AnalyticsSyncRun
+from blogops.domain.analytics.schemas import JobCommandCreate as AnalyticsJobCommandCreate
+from blogops.domain.analytics.service import AnalyticsService
+from blogops.domain.analytics.tasks import (
+    enqueue_analytics_report,
+    enqueue_analytics_sync,
+)
 from blogops.domain.bulk.models import BulkJob
 from blogops.domain.bulk.schemas import BulkCommandRequest
 from blogops.domain.bulk.service import BulkService
@@ -30,6 +38,18 @@ from blogops.domain.media.models import MediaOperationJob
 from blogops.domain.media.schemas import MediaJobCommandRequest
 from blogops.domain.media.service import MediaService
 from blogops.domain.media.tasks import enqueue_media_operation
+from blogops.domain.publishing.models import PublishJob, PublishingConnectionJob
+from blogops.domain.publishing.references import SQLAlchemyPublishingReadinessResolver
+from blogops.domain.publishing.schemas import CancelPublishCreate, RetryPublishCreate
+from blogops.domain.publishing.service import PublishingService
+from blogops.domain.publishing.tasks import enqueue_publish_job
+from blogops.domain.repurpose.enums import RepurposeCommandKind
+from blogops.domain.repurpose.models import RepurposeJob
+from blogops.domain.repurpose.schemas import (
+    RepurposeJobCommandCreate,
+)
+from blogops.domain.repurpose.service import RepurposeService
+from blogops.domain.repurpose.tasks import enqueue_repurpose_job
 from blogops.domain.research.models import ResearchRun
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
@@ -46,6 +66,11 @@ ResolvedJob = (
     | ResearchRun
     | MediaOperationJob
     | BulkJob
+    | AnalyticsSyncRun
+    | AnalyticsReportRun
+    | RepurposeJob
+    | PublishJob
+    | PublishingConnectionJob
 )
 
 
@@ -111,6 +136,36 @@ async def _resolve_job(
             BulkJob.id == job_id,
         )
     )
+    analytics_sync = await session.scalar(
+        select(AnalyticsSyncRun).where(
+            AnalyticsSyncRun.workspace_id == principal.workspace_id,
+            AnalyticsSyncRun.id == job_id,
+        )
+    )
+    analytics_report = await session.scalar(
+        select(AnalyticsReportRun).where(
+            AnalyticsReportRun.workspace_id == principal.workspace_id,
+            AnalyticsReportRun.id == job_id,
+        )
+    )
+    repurpose_job = await session.scalar(
+        select(RepurposeJob).where(
+            RepurposeJob.workspace_id == principal.workspace_id,
+            RepurposeJob.id == job_id,
+        )
+    )
+    publish_job = await session.scalar(
+        select(PublishJob).where(
+            PublishJob.workspace_id == principal.workspace_id,
+            PublishJob.id == job_id,
+        )
+    )
+    publishing_connection_job = await session.scalar(
+        select(PublishingConnectionJob).where(
+            PublishingConnectionJob.workspace_id == principal.workspace_id,
+            PublishingConnectionJob.id == job_id,
+        )
+    )
     matches = [
         ("KEYWORD_RESEARCH", keyword_job),
         ("KNOWLEDGE", knowledge_job),
@@ -118,6 +173,11 @@ async def _resolve_job(
         ("CONTENT_RESEARCH", research_run),
         ("MEDIA_OPERATION", media_job),
         ("BULK_CAMPAIGN", bulk_job),
+        ("ANALYTICS_SYNC", analytics_sync),
+        ("ANALYTICS_REPORT", analytics_report),
+        ("REPURPOSE_JOB", repurpose_job),
+        ("PUBLISH_JOB", publish_job),
+        ("PUBLISHING_CONNECTION_JOB", publishing_connection_job),
     ]
     found = [(kind, job) for kind, job in matches if job is not None]
     if not found:
@@ -133,6 +193,70 @@ async def _resolve_job(
 
 
 def _view(kind: str, job: ResolvedJob) -> JobView:
+    if isinstance(job, AnalyticsSyncRun):
+        return JobView(
+            job_id=job.id,
+            kind=kind,
+            state=job.state,
+            attempt=job.attempt,
+            error_code=job.error_code,
+            result=job.result,
+            created_at=job.created_at,
+            updated_at=job.updated_at,
+            finished_at=job.finished_at,
+        )
+    if isinstance(job, AnalyticsReportRun):
+        return JobView(
+            job_id=job.id,
+            kind=kind,
+            state=job.state,
+            attempt=job.attempt,
+            error_code=job.error_code,
+            created_at=job.created_at,
+            updated_at=job.updated_at,
+            finished_at=job.finished_at,
+        )
+    if isinstance(job, RepurposeJob):
+        return JobView(
+            job_id=job.id,
+            kind=kind,
+            state=job.state,
+            attempt=job.attempt,
+            error_code=job.error_code,
+            result={
+                "item_count": job.item_count,
+                "variant_count": job.variant_count,
+                "actual_cost": str(job.actual_cost),
+                "budget_currency": job.budget_currency,
+            },
+            created_at=job.created_at,
+            updated_at=job.updated_at,
+            finished_at=job.finished_at,
+        )
+    if isinstance(job, PublishJob):
+        return JobView(
+            job_id=job.id,
+            kind=kind,
+            state=job.state,
+            attempt=job.attempt,
+            error_code=job.error_code,
+            result=job.result_json,
+            created_at=job.created_at,
+            updated_at=job.updated_at,
+            finished_at=job.finished_at,
+        )
+    if isinstance(job, PublishingConnectionJob):
+        return JobView(
+            job_id=job.id,
+            kind=kind,
+            state=job.state,
+            attempt=job.attempt,
+            error_code=job.error_code,
+            result=job.safe_result_json,
+            created_at=job.created_at,
+            updated_at=job.updated_at,
+            finished_at=job.finished_at,
+        )
     if isinstance(job, KeywordResearchJob):
         return JobView(
             job_id=job.id,
@@ -226,6 +350,13 @@ def _generation_service(session: AsyncSession) -> GenerationService:
     )
 
 
+def _publishing_service(session: AsyncSession) -> PublishingService:
+    return PublishingService(
+        session,
+        readiness=SQLAlchemyPublishingReadinessResolver(session),
+    )
+
+
 @router.get("/{job_id}", response_model=JobView)
 async def get_job(
     job_id: UUID,
@@ -240,6 +371,11 @@ async def get_job(
         "CONTENT_RESEARCH": Permission.CONTENT_READ,
         "MEDIA_OPERATION": Permission.MEDIA_READ,
         "BULK_CAMPAIGN": Permission.BULK_READ,
+        "ANALYTICS_SYNC": Permission.CONTENT_READ,
+        "ANALYTICS_REPORT": Permission.CONTENT_READ,
+        "REPURPOSE_JOB": Permission.CONTENT_READ,
+        "PUBLISH_JOB": Permission.CONTENT_READ,
+        "PUBLISHING_CONNECTION_JOB": Permission.CONTENT_READ,
     }[kind]
     _require(principal, permission)
     return _view(kind, job)
@@ -254,6 +390,92 @@ async def cancel_job(
     idempotency_key: OptionalIdempotencyKey = None,
 ) -> JobView:
     kind, job = await _resolve_job(session, principal, job_id)
+    if kind == "ANALYTICS_SYNC" and isinstance(job, AnalyticsSyncRun):
+        _require(principal, Permission.CONTENT_WRITE)
+        if idempotency_key is None:
+            raise AppError(
+                code="IDEMPOTENCY_KEY_REQUIRED",
+                message="분석 작업 제어에는 Idempotency-Key가 필요합니다.",
+                status_code=422,
+            )
+        updated = await AnalyticsService(session).command_sync(
+            principal,
+            job.id,
+            AnalyticsJobCommandCreate(
+                command=AnalyticsCommandKind.CANCEL,
+                reason="common jobs API cancellation",
+            ),
+            idempotency_key=idempotency_key,
+        )
+        background_tasks.add_task(
+            enqueue_analytics_sync,
+            principal.workspace_id,
+            updated.id,
+        )
+        return _view(kind, updated)
+    if kind == "ANALYTICS_REPORT" and isinstance(job, AnalyticsReportRun):
+        _require(principal, Permission.CONTENT_WRITE)
+        if idempotency_key is None:
+            raise AppError(
+                code="IDEMPOTENCY_KEY_REQUIRED",
+                message="분석 작업 제어에는 Idempotency-Key가 필요합니다.",
+                status_code=422,
+            )
+        updated = await AnalyticsService(session).command_report(
+            principal,
+            job.id,
+            AnalyticsJobCommandCreate(
+                command=AnalyticsCommandKind.CANCEL,
+                reason="common jobs API cancellation",
+            ),
+            idempotency_key=idempotency_key,
+        )
+        background_tasks.add_task(
+            enqueue_analytics_report,
+            principal.workspace_id,
+            updated.id,
+        )
+        return _view(kind, updated)
+    if kind == "REPURPOSE_JOB" and isinstance(job, RepurposeJob):
+        _require(principal, Permission.CONTENT_WRITE)
+        if idempotency_key is None:
+            raise AppError(
+                code="IDEMPOTENCY_KEY_REQUIRED",
+                message="재가공 작업 제어에는 Idempotency-Key가 필요합니다.",
+                status_code=422,
+            )
+        updated = await RepurposeService(session).command_job(
+            principal,
+            job.id,
+            RepurposeJobCommandCreate(
+                command=RepurposeCommandKind.CANCEL,
+                reason="common jobs API cancellation",
+            ),
+            idempotency_key=idempotency_key,
+        )
+        background_tasks.add_task(
+            enqueue_repurpose_job,
+            principal.workspace_id,
+            updated.id,
+        )
+        return _view(kind, updated)
+    if kind == "PUBLISH_JOB" and isinstance(job, PublishJob):
+        _require(principal, Permission.CONTENT_PUBLISH)
+        updated = await _publishing_service(session).cancel_publish_job(
+            principal,
+            job.id,
+            CancelPublishCreate(
+                expected_lock_version=job.lock_version,
+                reason="common jobs API cancellation",
+            ),
+        )
+        background_tasks.add_task(
+            enqueue_publish_job,
+            principal.workspace_id,
+            updated.id,
+            None,
+        )
+        return _view(kind, updated)
     if kind == "MEDIA_OPERATION" and isinstance(job, MediaOperationJob):
         _require(principal, Permission.MEDIA_WRITE)
         if idempotency_key is None:
@@ -334,6 +556,92 @@ async def retry_job(
     idempotency_key: OptionalIdempotencyKey = None,
 ) -> JobView:
     kind, job = await _resolve_job(session, principal, job_id)
+    if kind == "ANALYTICS_SYNC" and isinstance(job, AnalyticsSyncRun):
+        _require(principal, Permission.CONTENT_WRITE)
+        if idempotency_key is None:
+            raise AppError(
+                code="IDEMPOTENCY_KEY_REQUIRED",
+                message="분석 작업 제어에는 Idempotency-Key가 필요합니다.",
+                status_code=422,
+            )
+        updated = await AnalyticsService(session).command_sync(
+            principal,
+            job.id,
+            AnalyticsJobCommandCreate(
+                command=AnalyticsCommandKind.RETRY,
+                reason="common jobs API retry",
+            ),
+            idempotency_key=idempotency_key,
+        )
+        background_tasks.add_task(
+            enqueue_analytics_sync,
+            principal.workspace_id,
+            updated.id,
+        )
+        return _view(kind, updated)
+    if kind == "ANALYTICS_REPORT" and isinstance(job, AnalyticsReportRun):
+        _require(principal, Permission.CONTENT_WRITE)
+        if idempotency_key is None:
+            raise AppError(
+                code="IDEMPOTENCY_KEY_REQUIRED",
+                message="분석 작업 제어에는 Idempotency-Key가 필요합니다.",
+                status_code=422,
+            )
+        updated = await AnalyticsService(session).command_report(
+            principal,
+            job.id,
+            AnalyticsJobCommandCreate(
+                command=AnalyticsCommandKind.RETRY,
+                reason="common jobs API retry",
+            ),
+            idempotency_key=idempotency_key,
+        )
+        background_tasks.add_task(
+            enqueue_analytics_report,
+            principal.workspace_id,
+            updated.id,
+        )
+        return _view(kind, updated)
+    if kind == "REPURPOSE_JOB" and isinstance(job, RepurposeJob):
+        _require(principal, Permission.CONTENT_WRITE)
+        if idempotency_key is None:
+            raise AppError(
+                code="IDEMPOTENCY_KEY_REQUIRED",
+                message="재가공 작업 제어에는 Idempotency-Key가 필요합니다.",
+                status_code=422,
+            )
+        updated = await RepurposeService(session).command_job(
+            principal,
+            job.id,
+            RepurposeJobCommandCreate(
+                command=RepurposeCommandKind.RETRY,
+                reason="common jobs API retry",
+            ),
+            idempotency_key=idempotency_key,
+        )
+        background_tasks.add_task(
+            enqueue_repurpose_job,
+            principal.workspace_id,
+            updated.id,
+        )
+        return _view(kind, updated)
+    if kind == "PUBLISH_JOB" and isinstance(job, PublishJob):
+        _require(principal, Permission.CONTENT_PUBLISH)
+        updated = await _publishing_service(session).retry_publish_job(
+            principal,
+            job.id,
+            RetryPublishCreate(
+                expected_lock_version=job.lock_version,
+                reason="common jobs API retry",
+            ),
+        )
+        background_tasks.add_task(
+            enqueue_publish_job,
+            principal.workspace_id,
+            updated.id,
+            None,
+        )
+        return _view(kind, updated)
     if kind == "MEDIA_OPERATION" and isinstance(job, MediaOperationJob):
         _require(principal, Permission.MEDIA_WRITE)
         if idempotency_key is None:

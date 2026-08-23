@@ -19,11 +19,14 @@ celery_app.conf.update(
     broker_connection_retry_on_startup=True,
     result_expires=86_400,
     imports=(
+        "blogops.domain.analytics.tasks",
         "blogops.domain.generation.tasks",
         "blogops.domain.bulk.tasks",
         "blogops.domain.knowledge.tasks",
         "blogops.domain.keywords.tasks",
         "blogops.domain.media.tasks",
+        "blogops.domain.publishing.tasks",
         "blogops.domain.research.tasks",
+        "blogops.domain.repurpose.tasks",
     ),
 )
