@@ -6,6 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from blogops.core.errors import AppError
 from blogops.domain.admin.enums import (
     AdminApprovalDecision,
     AdminCommandKind,
@@ -124,10 +125,13 @@ class NotificationPreferenceUpsert(StrictModel):
 
     @model_validator(mode="after")
     def enforce_mandatory(self) -> "NotificationPreferenceUpsert":
-        validate_notification_preference(
-            event_type=self.event_type,
-            frequency=self.frequency.value,
-        )
+        try:
+            validate_notification_preference(
+                event_type=self.event_type,
+                frequency=self.frequency.value,
+            )
+        except AppError as exc:
+            raise ValueError(exc.message) from exc
         if self.frequency == NotificationFrequency.DIGEST and self.digest_hour is None:
             raise ValueError("digest_hour is required for digest notifications")
         return self

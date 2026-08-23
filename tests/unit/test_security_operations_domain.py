@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
+from fastapi import FastAPI
 from pydantic import ValidationError
 from sqlalchemy import event
 
@@ -506,7 +507,9 @@ def test_operations_retries_only_transient_failures_with_bounded_backoff() -> No
 
 
 def test_stage9_public_and_authenticated_routes_have_distinct_boundaries() -> None:
-    paths = {route.path for route in api_router.routes}
+    app = FastAPI()
+    app.include_router(api_router)
+    paths = set(app.openapi()["paths"])
     assert "/webhooks/data-deletion/{provider}" in paths
     assert "/v1/operations/status" in paths
     assert "/v1/privacy/requests" in paths
