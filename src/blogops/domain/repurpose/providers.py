@@ -55,6 +55,8 @@ class BudgetReservation:
 
 
 class BudgetAuthorizationGateway(Protocol):
+    """Maximum-cost Hold and terminal settlement boundary for repurpose jobs."""
+
     async def reserve(
         self,
         *,
@@ -64,6 +66,30 @@ class BudgetAuthorizationGateway(Protocol):
         currency: str,
         request_hash: str,
     ) -> BudgetReservation: ...
+
+    async def finalize(
+        self,
+        *,
+        workspace_id: UUID,
+        actor_id: UUID,
+        reservation_ref: str,
+        actual_cost: Decimal,
+        currency: str,
+        terminal_event_id: str,
+    ) -> object: ...
+
+    async def release(
+        self,
+        *,
+        workspace_id: UUID,
+        actor_id: UUID,
+        reservation_ref: str,
+        actual_cost: Decimal,
+        currency: str,
+        terminal_event_id: str,
+        failure_class: str,
+        reason_code: str | None = None,
+    ) -> object: ...
 
 
 @dataclass(frozen=True)
@@ -160,6 +186,58 @@ class FailClosedRepurposeBudgetGateway:
         raise AppError(
             code="REPURPOSE_BUDGET_RUNTIME_UNAVAILABLE",
             message="비용 예약 경계가 구성되지 않았습니다.",
+            status_code=503,
+        )
+
+    async def finalize(
+        self,
+        *,
+        workspace_id: UUID,
+        actor_id: UUID,
+        reservation_ref: str,
+        actual_cost: Decimal,
+        currency: str,
+        terminal_event_id: str,
+    ) -> object:
+        del (
+            workspace_id,
+            actor_id,
+            reservation_ref,
+            actual_cost,
+            currency,
+            terminal_event_id,
+        )
+        raise AppError(
+            code="REPURPOSE_BUDGET_RUNTIME_UNAVAILABLE",
+            message="비용 Hold 확정 경계가 구성되지 않았습니다.",
+            status_code=503,
+        )
+
+    async def release(
+        self,
+        *,
+        workspace_id: UUID,
+        actor_id: UUID,
+        reservation_ref: str,
+        actual_cost: Decimal,
+        currency: str,
+        terminal_event_id: str,
+        failure_class: str,
+        reason_code: str | None = None,
+    ) -> object:
+        del (
+            workspace_id,
+            actor_id,
+            reservation_ref,
+            actual_cost,
+            currency,
+            terminal_event_id,
+            failure_class,
+            reason_code,
+        )
+        raise AppError(
+            code="REPURPOSE_BUDGET_RUNTIME_UNAVAILABLE",
+            message="비용 Hold 해제 경계가 구성되지 않았습니다.",
             status_code=503,
         )
 

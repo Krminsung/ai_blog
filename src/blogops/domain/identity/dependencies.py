@@ -10,6 +10,12 @@ from blogops.core.config import get_settings
 from blogops.core.context import Principal
 from blogops.core.errors import AppError
 from blogops.db.session import get_session
+from blogops.domain.developer.dependencies import (
+    get_developer_adapters,
+    get_developer_service,
+)
+from blogops.domain.developer.providers import ApiKeySecrets, RateLimitStore
+from blogops.domain.developer.service import DeveloperService
 from blogops.domain.identity.security import PasswordManager, SecretEnvelope, TokenManager
 from blogops.domain.identity.services import (
     EnterpriseIdentityService,
@@ -65,6 +71,8 @@ def get_enterprise_identity_service(
 async def get_current_principal(
     request: Request,
     identity: IdentityService = Depends(get_identity_service),
+    developer: DeveloperService = Depends(get_developer_service),
+    developer_adapters: ApiKeySecrets | RateLimitStore = Depends(get_developer_adapters),
 ) -> Principal:
     authorization = request.headers.get("Authorization", "")
     scheme, separator, credentials = authorization.partition(" ")
@@ -74,7 +82,24 @@ async def get_current_principal(
             message="Bearer 인증이 필요합니다.",
             status_code=401,
         )
-    principal = await identity.resolve_principal(credentials.strip())
+    raw_credentials = credentials.strip()
+    if raw_credentials.startswith("bops_"):
+        remote_address = request.client.host if request.client is not None else ""
+        principal = await developer.authenticate_api_key(
+            raw_credentials,
+            secrets_provider=developer_adapters,
+            remote_address=remote_address,
+            endpoint=request.url.path,
+        )
+        await developer.enforce_api_rate_limit(
+            principal,
+            api_key_id=principal.subject_id,
+            endpoint=request.url.path,
+            request_id=request.state.request_id,
+            store=developer_adapters,
+        )
+    else:
+        principal = await identity.resolve_principal(raw_credentials)
     request.state.principal = principal
     return principal
 

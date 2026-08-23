@@ -15,10 +15,12 @@ from blogops.db.session import apply_workspace_scope, get_database
 from blogops.domain.jobs.state import JobState, StepState
 from blogops.domain.repurpose.models import (
     RepurposeInputSnapshot,
+    RepurposeJob,
     RepurposeSnapshotCitation,
     RepurposeSnapshotClaim,
 )
 from blogops.domain.repurpose.providers import (
+    BudgetAuthorizationGateway,
     ModelGatewayRegistry,
     RepurposeGenerationRequest,
 )
@@ -30,6 +32,12 @@ class RepurposeJobExecutor(Protocol):
     async def execute(
         self, session: AsyncSession, *, workspace_id: UUID, job_id: UUID
     ) -> None: ...
+
+
+class RepurposeBudgetGatewayFactory(Protocol):
+    """Build a transaction-bound billing gateway for a worker session."""
+
+    def __call__(self, session: AsyncSession) -> BudgetAuthorizationGateway: ...
 
 
 class ApprovedModelRepurposeExecutor:
@@ -145,11 +153,104 @@ class ApprovedModelRepurposeExecutor:
 
 
 _executor: RepurposeJobExecutor | None = None
+_budget_gateway_factory: RepurposeBudgetGatewayFactory | None = None
+
+_SUCCESS_SETTLEMENT_STATES = frozenset(
+    {
+        JobState.WAITING_REVIEW,
+        JobState.SUCCEEDED,
+    }
+)
+_RELEASE_SETTLEMENT_STATES = frozenset(
+    {
+        JobState.FINAL_FAILED,
+        JobState.CANCELLED,
+        JobState.EXPIRED,
+    }
+)
 
 
 def configure_repurpose_executor(executor: RepurposeJobExecutor) -> None:
     global _executor
     _executor = executor
+
+
+def configure_repurpose_budget_gateway_factory(
+    factory: RepurposeBudgetGatewayFactory,
+) -> None:
+    global _budget_gateway_factory
+    _budget_gateway_factory = factory
+
+
+def _budget_gateway(session: AsyncSession) -> BudgetAuthorizationGateway:
+    if _budget_gateway_factory is not None:
+        return _budget_gateway_factory(session)
+
+    from blogops.domain.billing.adapters import create_repurpose_budget_gateway
+
+    return create_repurpose_budget_gateway(session)
+
+
+async def _settle_terminal(
+    session: AsyncSession,
+    job: RepurposeJob,
+) -> None:
+    """Settle once the model-cost lifecycle has a durable terminal outcome.
+
+    ``WAITING_REVIEW`` is successful completion of the model execution phase.
+    ``PARTIAL`` and ``RETRYABLE_FAILED`` deliberately keep the maximum-cost Hold
+    active because both may return to ``QUEUED`` without creating a new job. A
+    later cancel or expiry after every item succeeded replays that original
+    successful settlement instead of attempting a conflicting refund.
+    """
+
+    state = JobState(job.state)
+    if state not in _SUCCESS_SETTLEMENT_STATES | _RELEASE_SETTLEMENT_STATES:
+        return
+    if not job.budget_reservation_ref:
+        raise AppError(
+            "REPURPOSE_BUDGET_RESERVATION_MISSING",
+            "비용 Hold 참조가 없어 리퍼포징 작업을 종료하지 않았습니다.",
+            409,
+        )
+    settlement_state = await _cost_settlement_state(session, job, state)
+    gateway = _budget_gateway(session)
+    event_id = f"repurpose-job:{job.id}:{settlement_state.value}"
+    if settlement_state in _SUCCESS_SETTLEMENT_STATES:
+        await gateway.finalize(
+            workspace_id=job.workspace_id,
+            actor_id=job.requested_by,
+            reservation_ref=job.budget_reservation_ref,
+            actual_cost=job.actual_cost,
+            currency=job.budget_currency,
+            terminal_event_id=event_id,
+        )
+        return
+    await gateway.release(
+        workspace_id=job.workspace_id,
+        actor_id=job.requested_by,
+        reservation_ref=job.budget_reservation_ref,
+        actual_cost=job.actual_cost,
+        currency=job.budget_currency,
+        terminal_event_id=event_id,
+        failure_class=settlement_state.value,
+        reason_code=job.error_code or f"REPURPOSE_{settlement_state.value}",
+    )
+
+
+async def _cost_settlement_state(
+    session: AsyncSession,
+    job: RepurposeJob,
+    state: JobState,
+) -> JobState:
+    if state is JobState.SUCCEEDED:
+        return JobState.WAITING_REVIEW
+    if state not in {JobState.CANCELLED, JobState.EXPIRED}:
+        return state
+    items = await RepurposeRepository(session, job.workspace_id).job_items(job.id)
+    if items and all(item.state == StepState.SUCCEEDED.value for item in items):
+        return JobState.WAITING_REVIEW
+    return state
 
 
 async def _run_job(workspace_id: UUID, job_id: UUID) -> str:
@@ -163,6 +264,7 @@ async def _run_job(workspace_id: UUID, job_id: UUID) -> str:
                     workspace_id=workspace_id, job_id=job_id
                 )
                 if row.state != JobState.QUEUED.value:
+                    await _settle_terminal(session, row)
                     return row.state
                 if _executor is None:
                     row = await service.fail_runtime(
@@ -172,11 +274,13 @@ async def _run_job(workspace_id: UUID, job_id: UUID) -> str:
                         detail="approved repurposing model runtime is not configured",
                         retryable=True,
                     )
+                    await _settle_terminal(session, row)
                     return row.state
                 row = await service.mark_generating(
                     workspace_id=workspace_id, job_id=job_id
                 )
                 if row.state == JobState.CANCELLED.value:
+                    await _settle_terminal(session, row)
                     return row.state
                 try:
                     await _executor.execute(
@@ -190,6 +294,7 @@ async def _run_job(workspace_id: UUID, job_id: UUID) -> str:
                         detail=exc.message,
                         retryable=_is_retryable_runtime_error(exc),
                     )
+                    await _settle_terminal(session, row)
                     return row.state
                 except Exception as exc:
                     row = await service.fail_runtime(
@@ -199,13 +304,19 @@ async def _run_job(workspace_id: UUID, job_id: UUID) -> str:
                         detail=type(exc).__name__,
                         retryable=True,
                     )
+                    await _settle_terminal(session, row)
                     return row.state
                 row = await service.finalize_cancellation(
                     workspace_id=workspace_id, job_id=job_id
                 )
                 if row.state == JobState.CANCELLED.value:
+                    await _settle_terminal(session, row)
                     return row.state
-                row = await service.complete_job(workspace_id=workspace_id, job_id=job_id)
+                row = await service.complete_job(
+                    workspace_id=workspace_id,
+                    job_id=job_id,
+                )
+                await _settle_terminal(session, row)
                 return row.state
     finally:
         await database.close()

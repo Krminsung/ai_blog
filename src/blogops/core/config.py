@@ -68,6 +68,7 @@ class Settings(BaseSettings):
     idempotency_ttl_seconds: int = 86_400
     idempotency_lock_seconds: int = 120
     outbox_batch_size: int = 100
+    payment_webhook_max_bytes: int = 1024 * 1024
 
     @field_validator("database_url")
     @classmethod
@@ -81,6 +82,13 @@ class Settings(BaseSettings):
     def validate_port(cls, value: int) -> int:
         if not 1 <= value <= 65_535:
             raise ValueError("BLOGOPS_API_PORT must be between 1 and 65535")
+        return value
+
+    @field_validator("payment_webhook_max_bytes")
+    @classmethod
+    def validate_payment_webhook_max_bytes(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("BLOGOPS_PAYMENT_WEBHOOK_MAX_BYTES must be positive")
         return value
 
     @model_validator(mode="after")

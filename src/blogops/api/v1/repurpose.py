@@ -11,7 +11,6 @@ from blogops.core.permissions import Permission, require_permissions
 from blogops.db.session import get_tenant_session
 from blogops.domain.repurpose.providers import (
     BudgetAuthorizationGateway,
-    FailClosedRepurposeBudgetGateway,
     FailClosedRepurposeExportStore,
     RepurposeExportStore,
 )
@@ -47,10 +46,18 @@ IdempotencyKey = Annotated[
 ]
 
 
-def repurpose_budget_gateway() -> BudgetAuthorizationGateway:
-    """Production wiring must override this with the billing reservation adapter."""
+def repurpose_budget_gateway(
+    session: TenantSession,
+) -> BudgetAuthorizationGateway:
+    """Build the billing-backed gateway in the request's tenant transaction.
 
-    return FailClosedRepurposeBudgetGateway()
+    Deployments may continue to override this FastAPI dependency for an approved
+    external billing boundary.
+    """
+
+    from blogops.domain.billing.adapters import create_repurpose_budget_gateway
+
+    return create_repurpose_budget_gateway(session)
 
 
 def repurpose_export_store() -> RepurposeExportStore:

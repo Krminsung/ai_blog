@@ -87,18 +87,23 @@ class BudgetEntitlementGateway(Protocol):
         self,
         *,
         workspace_id: UUID,
+        actor_id: UUID,
         reservation_ref: str,
         settlement: UsageSettlement,
-        idempotency_key: str,
+        terminal_event_id: str,
     ) -> None: ...
 
     async def release(
         self,
         *,
         workspace_id: UUID,
+        actor_id: UUID,
         reservation_ref: str,
+        actual_cost: Decimal,
+        currency: str,
         reason: str,
-        idempotency_key: str,
+        terminal_event_id: str,
+        failure_class: str,
     ) -> None: ...
 
 
@@ -158,22 +163,36 @@ class FailClosedBudgetEntitlementGateway:
         self,
         *,
         workspace_id: UUID,
+        actor_id: UUID,
         reservation_ref: str,
         settlement: UsageSettlement,
-        idempotency_key: str,
+        terminal_event_id: str,
     ) -> None:
-        del workspace_id, reservation_ref, settlement, idempotency_key
+        del workspace_id, actor_id, reservation_ref, settlement, terminal_event_id
         raise _unavailable("BUDGET_ENTITLEMENT_UNAVAILABLE", "billing-boundary")
 
     async def release(
         self,
         *,
         workspace_id: UUID,
+        actor_id: UUID,
         reservation_ref: str,
+        actual_cost: Decimal,
+        currency: str,
         reason: str,
-        idempotency_key: str,
+        terminal_event_id: str,
+        failure_class: str,
     ) -> None:
-        del workspace_id, reservation_ref, reason, idempotency_key
+        del (
+            workspace_id,
+            actor_id,
+            reservation_ref,
+            actual_cost,
+            currency,
+            reason,
+            terminal_event_id,
+            failure_class,
+        )
         raise _unavailable("BUDGET_ENTITLEMENT_UNAVAILABLE", "billing-boundary")
 
 

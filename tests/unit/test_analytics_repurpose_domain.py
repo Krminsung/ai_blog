@@ -4,8 +4,10 @@ from collections.abc import Callable
 from decimal import Decimal
 from types import SimpleNamespace
 from typing import cast
+from uuid import NAMESPACE_URL, uuid5
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from blogops.core.errors import AppError
 from blogops.domain.analytics.models import AnalyticsSyncRun
@@ -21,6 +23,7 @@ from blogops.domain.analytics.tasks import (
     _is_retryable_runtime_error as analytics_failure_is_retryable,
 )
 from blogops.domain.jobs.state import JobState, StepState
+from blogops.domain.repurpose import tasks as repurpose_tasks
 from blogops.domain.repurpose.enums import RepurposeKind
 from blogops.domain.repurpose.models import RepurposeJob, RepurposeJobItem
 from blogops.domain.repurpose.rules import (
@@ -272,3 +275,89 @@ def test_repurpose_retry_resets_only_incomplete_items() -> None:
     assert failed.state == StepState.PENDING.value
     assert failed.error_code is None
     assert failed.error_detail is None
+
+
+@pytest.mark.asyncio
+async def test_repurpose_terminal_settlement_uses_persisted_job_cost_and_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, dict[str, object]]] = []
+
+    class RecordingBudgetGateway:
+        async def finalize(self, **kwargs: object) -> object:
+            calls.append(("finalize", kwargs))
+            return object()
+
+        async def release(self, **kwargs: object) -> object:
+            calls.append(("release", kwargs))
+            return object()
+
+    gateway = RecordingBudgetGateway()
+    monkeypatch.setattr(
+        repurpose_tasks,
+        "_budget_gateway_factory",
+        lambda _session: gateway,
+    )
+    workspace_id = uuid5(NAMESPACE_URL, "repurpose-workspace")
+    actor_id = uuid5(NAMESPACE_URL, "repurpose-actor")
+    job_id = uuid5(NAMESPACE_URL, "repurpose-job")
+    job = cast(
+        RepurposeJob,
+        SimpleNamespace(
+            id=job_id,
+            workspace_id=workspace_id,
+            requested_by=actor_id,
+            state=JobState.WAITING_REVIEW.value,
+            budget_reservation_ref="credit-hold:repurpose",
+            actual_cost=Decimal("3.2500"),
+            budget_currency="KRW",
+            error_code=None,
+        ),
+    )
+    session = cast(AsyncSession, object())
+
+    await repurpose_tasks._settle_terminal(session, job)
+    assert calls == [
+        (
+            "finalize",
+            {
+                "workspace_id": workspace_id,
+                "actor_id": actor_id,
+                "reservation_ref": "credit-hold:repurpose",
+                "actual_cost": Decimal("3.2500"),
+                "currency": "KRW",
+                "terminal_event_id": f"repurpose-job:{job_id}:WAITING_REVIEW",
+            },
+        )
+    ]
+
+    job.state = JobState.FINAL_FAILED.value
+    job.error_code = "REPURPOSE_POLICY_FAILED"
+    await repurpose_tasks._settle_terminal(session, job)
+    assert calls[-1] == (
+        "release",
+        {
+            "workspace_id": workspace_id,
+            "actor_id": actor_id,
+            "reservation_ref": "credit-hold:repurpose",
+            "actual_cost": Decimal("3.2500"),
+            "currency": "KRW",
+            "terminal_event_id": f"repurpose-job:{job_id}:FINAL_FAILED",
+            "failure_class": "FINAL_FAILED",
+            "reason_code": "REPURPOSE_POLICY_FAILED",
+        },
+    )
+
+    class CompletedItemsRepository:
+        async def job_items(self, _job_id: object) -> list[SimpleNamespace]:
+            return [SimpleNamespace(state=StepState.SUCCEEDED.value)]
+
+    monkeypatch.setattr(
+        repurpose_tasks,
+        "RepurposeRepository",
+        lambda _session, _workspace_id: CompletedItemsRepository(),
+    )
+    job.state = JobState.CANCELLED.value
+    job.error_code = None
+    await repurpose_tasks._settle_terminal(session, job)
+    assert calls[-1] == calls[0]

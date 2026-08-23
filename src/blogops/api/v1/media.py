@@ -10,10 +10,7 @@ from blogops.core.config import get_settings
 from blogops.core.context import Principal
 from blogops.core.permissions import Permission, require_permissions
 from blogops.db.session import get_tenant_session
-from blogops.domain.media.providers import (
-    FailClosedMediaBudgetGate,
-    MediaBudgetGate,
-)
+from blogops.domain.media.providers import MediaBudgetGate
 from blogops.domain.media.schemas import (
     ImagePlanCreate,
     ImagePlanItemRead,
@@ -62,10 +59,12 @@ def media_service(session: TenantSession) -> MediaService:
     return MediaService(session)
 
 
-def media_budget_gate() -> MediaBudgetGate:
-    """Production wiring must override this with the billing reservation adapter."""
+def media_budget_gate(session: TenantSession) -> MediaBudgetGate:
+    """Build the billing-backed gate in the request's tenant transaction."""
 
-    return FailClosedMediaBudgetGate()
+    from blogops.domain.billing.adapters import create_media_budget_gate
+
+    return create_media_budget_gate(session)
 
 
 Service = Annotated[MediaService, Depends(media_service)]

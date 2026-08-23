@@ -39,6 +39,9 @@ class Permission(StrEnum):
     BILLING_READ = "billing:read"
     BILLING_MANAGE = "billing:manage"
     API_MANAGE = "api:manage"
+    AGENCY_READ = "agency:read"
+    AGENCY_MANAGE = "agency:manage"
+    PORTAL_MANAGE = "portal:manage"
 
 
 def get_principal(request: Request) -> Principal:

@@ -17,10 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from blogops.core.context import Principal
 from blogops.core.permissions import Permission, require_permissions
 from blogops.db.session import get_tenant_session
-from blogops.domain.generation.providers import (
-    BudgetEntitlementGateway,
-    FailClosedBudgetEntitlementGateway,
-)
+from blogops.domain.generation.providers import BudgetEntitlementGateway
 from blogops.domain.generation.schemas import (
     CollaborationEventCreate,
     ContentCreate,
@@ -41,7 +38,11 @@ from blogops.domain.generation.schemas import (
 )
 from blogops.domain.generation.service import GenerationService
 from blogops.domain.generation.snapshots import SQLAlchemyGenerationSnapshotResolver
-from blogops.domain.generation.tasks import enqueue_generation_job
+from blogops.domain.generation.tasks import (
+    enqueue_generation_job,
+    settle_generation_terminal,
+)
+from blogops.domain.jobs.state import JobState
 
 
 router = APIRouter(tags=["content"])
@@ -54,10 +55,12 @@ IdempotencyKey = Annotated[
 ]
 
 
-def get_budget_entitlement_gateway() -> BudgetEntitlementGateway:
-    """Fail closed until the billing composition root overrides this dependency."""
+def get_budget_entitlement_gateway(session: TenantSession) -> BudgetEntitlementGateway:
+    """Use the current tenant transaction and fail closed on missing billing policy."""
 
-    return FailClosedBudgetEntitlementGateway()
+    from blogops.domain.billing.adapters import create_generation_budget_gateway
+
+    return create_generation_budget_gateway(session)
 
 
 BudgetGateway = Annotated[
@@ -136,6 +139,7 @@ async def cancel_content_job(
     data: JobCommandRequest,
     principal: ContentWriter,
     service: Service,
+    background_tasks: BackgroundTasks,
     idempotency_key: IdempotencyKey,
 ) -> ContentJobRead:
     job = await service.cancel_job(
@@ -144,6 +148,19 @@ async def cancel_content_job(
         idempotency_key=idempotency_key,
         reason=data.reason,
     )
+    if job.state == JobState.CANCELLED.value:
+        await settle_generation_terminal(
+            service.session,
+            service.budget,
+            workspace_id=principal.workspace_id,
+            job_id=job.id,
+        )
+    elif job.state == JobState.CANCEL_REQUESTED.value:
+        background_tasks.add_task(
+            enqueue_generation_job,
+            principal.workspace_id,
+            job.id,
+        )
     return ContentJobRead.model_validate(job)
 
 

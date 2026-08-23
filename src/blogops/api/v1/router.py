@@ -2,10 +2,14 @@
 
 from fastapi import APIRouter, Depends
 
+from blogops.api.v1.admin import router as admin_router
 from blogops.api.v1.analytics import router as analytics_router
+from blogops.api.v1.b2b import router as b2b_router
+from blogops.api.v1.billing import router as billing_router, usage_router
 from blogops.api.v1.brands import router as brands_router
 from blogops.api.v1.bulk import router as bulk_router
 from blogops.api.v1.content import router as content_router
+from blogops.api.v1.developer import router as developer_router
 from blogops.api.v1.identity import router as identity_router
 from blogops.api.v1.jobs import router as jobs_router
 from blogops.api.v1.keywords import router as keywords_router
@@ -32,6 +36,11 @@ router.include_router(bulk_router, dependencies=[Depends(get_current_principal)]
 router.include_router(publishing_router, dependencies=[Depends(get_current_principal)])
 router.include_router(analytics_router, dependencies=[Depends(get_current_principal)])
 router.include_router(repurpose_router, dependencies=[Depends(get_current_principal)])
+router.include_router(billing_router, dependencies=[Depends(get_current_principal)])
+router.include_router(usage_router, dependencies=[Depends(get_current_principal)])
+router.include_router(developer_router, dependencies=[Depends(get_current_principal)])
+router.include_router(b2b_router, dependencies=[Depends(get_current_principal)])
+router.include_router(admin_router, dependencies=[Depends(get_current_principal)])
 router.include_router(jobs_router, dependencies=[Depends(get_current_principal)])
 
 

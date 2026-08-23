@@ -2722,8 +2722,24 @@ def _default_roles() -> dict[str, tuple[str, list[str]]]:
                 Permission.BULK_EXPORT.value,
             ],
         ),
-        "billing": ("Billing", read + [Permission.BILLING_READ.value]),
+        "billing": (
+            "Billing",
+            read
+            + [
+                Permission.BILLING_READ.value,
+                Permission.BILLING_MANAGE.value,
+            ],
+        ),
         "developer": ("Developer", read + [Permission.API_MANAGE.value]),
+        "agency_manager": (
+            "Agency Manager",
+            read
+            + [
+                Permission.AGENCY_READ.value,
+                Permission.AGENCY_MANAGE.value,
+                Permission.PORTAL_MANAGE.value,
+            ],
+        ),
         "viewer": (
             "Viewer",
             read

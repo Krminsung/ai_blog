@@ -22,10 +22,6 @@ from blogops.domain.identity.dependencies import (
     request_user_agent_hash,
 )
 from blogops.domain.identity.schemas import (
-    AgencyClientCreateRequest,
-    AgencyClientView,
-    AgencyCreateRequest,
-    AgencyView,
     AuditLogView,
     EmailAddressRequest,
     FederatedConnectionCreateRequest,
@@ -648,38 +644,6 @@ async def configure_scim(
         bearer_token=result.bearer_token,
         provider_key=result.configuration.provider_key,
     )
-
-
-@router.post(
-    "/workspaces/{workspace_id}/agency",
-    response_model=AgencyView,
-    status_code=status.HTTP_201_CREATED,
-    tags=["agency"],
-)
-async def create_agency(
-    workspace_id: UUID,
-    body: AgencyCreateRequest,
-    principal: AuthenticatedPrincipal,
-    enterprise: EnterpriseDependency,
-) -> AgencyView:
-    agency = await enterprise.create_agency(principal.subject_id, workspace_id, body)
-    return AgencyView.model_validate(agency)
-
-
-@router.post(
-    "/workspaces/{workspace_id}/agency/clients",
-    response_model=AgencyClientView,
-    status_code=status.HTTP_201_CREATED,
-    tags=["agency"],
-)
-async def add_agency_client(
-    workspace_id: UUID,
-    body: AgencyClientCreateRequest,
-    principal: AuthenticatedPrincipal,
-    enterprise: EnterpriseDependency,
-) -> AgencyClientView:
-    client = await enterprise.add_agency_client(principal.subject_id, workspace_id, body)
-    return AgencyClientView.model_validate(client)
 
 
 def _token_pair(result: TokenPairResult) -> TokenPair:

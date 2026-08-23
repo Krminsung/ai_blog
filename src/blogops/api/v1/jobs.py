@@ -21,15 +21,21 @@ from blogops.domain.analytics.tasks import (
     enqueue_analytics_report,
     enqueue_analytics_sync,
 )
+from blogops.domain.b2b.models import ClientProvisioningRequest
+from blogops.domain.billing.models import PaymentCommand
 from blogops.domain.bulk.models import BulkJob
 from blogops.domain.bulk.schemas import BulkCommandRequest
 from blogops.domain.bulk.service import BulkService
 from blogops.domain.bulk.tasks import enqueue_bulk_job
+from blogops.domain.developer.models import WebhookDelivery
 from blogops.domain.generation.models import GenerationJob
-from blogops.domain.generation.providers import FailClosedBudgetEntitlementGateway
 from blogops.domain.generation.service import GenerationService
 from blogops.domain.generation.snapshots import SQLAlchemyGenerationSnapshotResolver
-from blogops.domain.generation.tasks import enqueue_generation_job
+from blogops.domain.generation.tasks import (
+    enqueue_generation_job,
+    settle_generation_terminal,
+)
+from blogops.domain.jobs.state import JobState
 from blogops.domain.keywords.models import KeywordResearchJob
 from blogops.domain.keywords.services import request_cancel, request_retry
 from blogops.domain.keywords.tasks import enqueue_keyword_job
@@ -71,6 +77,9 @@ ResolvedJob = (
     | RepurposeJob
     | PublishJob
     | PublishingConnectionJob
+    | PaymentCommand
+    | ClientProvisioningRequest
+    | WebhookDelivery
 )
 
 
@@ -166,6 +175,24 @@ async def _resolve_job(
             PublishingConnectionJob.id == job_id,
         )
     )
+    payment_command = await session.scalar(
+        select(PaymentCommand).where(
+            PaymentCommand.workspace_id == principal.workspace_id,
+            PaymentCommand.id == job_id,
+        )
+    )
+    provisioning_request = await session.scalar(
+        select(ClientProvisioningRequest).where(
+            ClientProvisioningRequest.workspace_id == principal.workspace_id,
+            ClientProvisioningRequest.id == job_id,
+        )
+    )
+    webhook_delivery = await session.scalar(
+        select(WebhookDelivery).where(
+            WebhookDelivery.workspace_id == principal.workspace_id,
+            WebhookDelivery.id == job_id,
+        )
+    )
     matches = [
         ("KEYWORD_RESEARCH", keyword_job),
         ("KNOWLEDGE", knowledge_job),
@@ -178,6 +205,9 @@ async def _resolve_job(
         ("REPURPOSE_JOB", repurpose_job),
         ("PUBLISH_JOB", publish_job),
         ("PUBLISHING_CONNECTION_JOB", publishing_connection_job),
+        ("PAYMENT_COMMAND", payment_command),
+        ("CLIENT_PROVISIONING", provisioning_request),
+        ("WEBHOOK_DELIVERY", webhook_delivery),
     ]
     found = [(kind, job) for kind, job in matches if job is not None]
     if not found:
@@ -193,6 +223,51 @@ async def _resolve_job(
 
 
 def _view(kind: str, job: ResolvedJob) -> JobView:
+    if isinstance(job, PaymentCommand):
+        return JobView(
+            job_id=job.id,
+            kind=kind,
+            state=job.state,
+            attempt=0,
+            error_code=job.error_code,
+            result={"checkout_url": job.checkout_url} if job.checkout_url else None,
+            created_at=job.created_at,
+            updated_at=job.updated_at,
+        )
+    if isinstance(job, ClientProvisioningRequest):
+        result = None
+        if job.provisioned_workspace_id is not None:
+            result = {
+                "provisioned_workspace_id": str(job.provisioned_workspace_id),
+                "provider_operation_ref": job.provider_operation_ref,
+            }
+        return JobView(
+            job_id=job.id,
+            kind=kind,
+            state=job.state,
+            attempt=0,
+            error_code=job.error_code,
+            result=result,
+            created_at=job.created_at,
+            updated_at=job.updated_at,
+        )
+    if isinstance(job, WebhookDelivery):
+        finished_at = job.delivered_at or job.dead_lettered_at
+        return JobView(
+            job_id=job.id,
+            kind=kind,
+            state=job.state,
+            attempt=job.attempt_count,
+            error_code=job.last_error_code,
+            result=(
+                {"delivered_at": job.delivered_at.isoformat()}
+                if job.delivered_at
+                else None
+            ),
+            created_at=job.created_at,
+            updated_at=job.updated_at,
+            finished_at=finished_at,
+        )
     if isinstance(job, AnalyticsSyncRun):
         return JobView(
             job_id=job.id,
@@ -343,10 +418,12 @@ def _view(kind: str, job: ResolvedJob) -> JobView:
 
 
 def _generation_service(session: AsyncSession) -> GenerationService:
+    from blogops.domain.billing.adapters import create_generation_budget_gateway
+
     return GenerationService(
         session,
         snapshots=SQLAlchemyGenerationSnapshotResolver(session),
-        budget=FailClosedBudgetEntitlementGateway(),
+        budget=create_generation_budget_gateway(session),
     )
 
 
@@ -376,6 +453,9 @@ async def get_job(
         "REPURPOSE_JOB": Permission.CONTENT_READ,
         "PUBLISH_JOB": Permission.CONTENT_READ,
         "PUBLISHING_CONNECTION_JOB": Permission.CONTENT_READ,
+        "PAYMENT_COMMAND": Permission.BILLING_READ,
+        "CLIENT_PROVISIONING": Permission.AGENCY_READ,
+        "WEBHOOK_DELIVERY": Permission.API_MANAGE,
     }[kind]
     _require(principal, permission)
     return _view(kind, job)
@@ -529,12 +609,26 @@ async def cancel_job(
                 message="콘텐츠 작업 제어에는 Idempotency-Key가 필요합니다.",
                 status_code=422,
             )
-        updated = await _generation_service(session).cancel_job(
+        service = _generation_service(session)
+        updated = await service.cancel_job(
             principal,
             job.id,
             idempotency_key=idempotency_key,
             reason="common jobs API cancellation",
         )
+        if updated.state == JobState.CANCELLED.value:
+            await settle_generation_terminal(
+                session,
+                service.budget,
+                workspace_id=principal.workspace_id,
+                job_id=updated.id,
+            )
+        elif updated.state == JobState.CANCEL_REQUESTED.value:
+            background_tasks.add_task(
+                enqueue_generation_job,
+                principal.workspace_id,
+                updated.id,
+            )
         return _view(kind, updated)
     if kind != "KEYWORD_RESEARCH" or not isinstance(job, KeywordResearchJob):
         raise AppError(

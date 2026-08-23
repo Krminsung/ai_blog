@@ -7,6 +7,7 @@ from uuid import UUID
 from celery import shared_task
 from sqlalchemy import select
 
+from blogops.domain.billing.adapters import create_publishing_entitlement_resolver
 from blogops.db.session import apply_workspace_scope, get_database
 from blogops.domain.jobs.state import JobState
 from blogops.core.context import Principal
@@ -167,6 +168,7 @@ async def _schedule_connection_monitors(
                 service = PublishingService(
                     session,
                     readiness=SQLAlchemyPublishingReadinessResolver(session),
+                    entitlements=create_publishing_entitlement_resolver(session),
                 )
                 queued: list[UUID] = []
                 bucket = now.strftime("%Y%m%d%H%M")
@@ -271,6 +273,7 @@ async def _schedule_reconciliations(
                 service = PublishingService(
                     session,
                     readiness=SQLAlchemyPublishingReadinessResolver(session),
+                    entitlements=create_publishing_entitlement_resolver(session),
                 )
                 queued: list[UUID] = []
                 bucket = now.strftime("%Y%m%d%H%M")

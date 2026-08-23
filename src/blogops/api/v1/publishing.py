@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from blogops.core.context import Principal
 from blogops.core.permissions import Permission, require_permissions
 from blogops.db.session import get_tenant_session
+from blogops.domain.billing.adapters import create_publishing_entitlement_resolver
 from blogops.domain.jobs.state import JobState
 from blogops.domain.publishing.enums import (
     ConnectionOperation,
@@ -72,6 +73,7 @@ def publishing_service(session: TenantSession) -> PublishingService:
     return PublishingService(
         session,
         readiness=SQLAlchemyPublishingReadinessResolver(session),
+        entitlements=create_publishing_entitlement_resolver(session),
     )
 
 

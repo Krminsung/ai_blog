@@ -18,7 +18,7 @@ from blogops.domain.bulk.ingestion import (
     verify_uploaded_bulk_snapshot,
 )
 from blogops.domain.bulk.parsing import preview_csv
-from blogops.domain.bulk.providers import BulkBudgetGate, FailClosedBulkBudgetGate
+from blogops.domain.bulk.providers import BulkBudgetGate
 from blogops.domain.bulk.schemas import (
     BulkCommandRequest,
     BulkExportRequest,
@@ -61,10 +61,12 @@ def bulk_service(session: TenantSession) -> BulkService:
     return BulkService(session)
 
 
-def bulk_budget_gate() -> BulkBudgetGate:
-    """Production wiring must override this with the billing reservation adapter."""
+def bulk_budget_gate(session: TenantSession) -> BulkBudgetGate:
+    """Build the billing-backed gate in the request's tenant transaction."""
 
-    return FailClosedBulkBudgetGate()
+    from blogops.domain.billing.adapters import create_bulk_budget_gate
+
+    return create_bulk_budget_gate(session)
 
 
 def bulk_malware_scanner() -> MalwareScanner:

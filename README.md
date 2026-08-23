@@ -4,7 +4,7 @@ BlogOps AI는 근거 기반 콘텐츠 생성, 품질 검수, 승인, 공식 채�
 통합하는 멀티테넌트 SaaS의 백엔드입니다. 이 저장소에는 프론트엔드나 브라우저 확장
 코드가 포함되지 않습니다.
 
-현재 `7-publishing-analytics` 단계까지 다음 백엔드 기반을 제공합니다.
+현재 `8-billing-developer-b2b-admin` 단계까지 다음 백엔드 기반을 제공합니다.
 
 - FastAPI 애플리케이션과 버전이 있는 `/v1` API 경계
 - PostgreSQL/pgvector, Redis, Celery 기반 실행 환경
@@ -42,6 +42,12 @@ BlogOps AI는 근거 기반 콘텐츠 생성, 품질 검수, 승인, 공식 채�
 - 네이버 무인 게시를 금지하는 불변 수동 패키지·체크리스트·사용자 확인 흐름
 - 공식 분석 공급자·원본 증거·지표 정의를 고정하는 성과·전환·ROI·리포트 파이프라인
 - 근거·정책·모델·비용 Snapshot과 승인 Gate를 고정하는 14종 콘텐츠 재활용
+- 버전 고정 요금제·구독과 금전/크레딧 분리 원장, 최대 Hold·확정·반환·사용량 계보
+- 서명 검증 결제 Webhook, 비동기 Checkout 명령과 생성·미디어·대량·재활용 비용 정산
+- 원문 1회 표시·회전·Scope·IP 정책 API Key와 Workspace/Key/Endpoint 다층 Rate Limit
+- DNS 재검증·HMAC·재시도·DLQ·수동 Replay를 갖춘 비동기 Outbound Webhook
+- Agency/Client 격리, 고객 검수 Portal, White-label 버전, 비용 배부와 고객 자동 Provisioning
+- 고객 동의형 지원 접근, 2인 승인 운영 명령, 불변 관리자 감사와 사용자 알림 전달 경계
 
 전체 백엔드 범위와 단계는 `ai_blog_automation_service_plan.md`와
 `ai_blog_automation_function_spec.md`를 정본으로 삼습니다.

@@ -67,13 +67,12 @@ def configure_media_budget_gate_factory(factory: MediaBudgetGateFactory) -> None
 
 
 def _budget_gate(session: AsyncSession) -> MediaBudgetGate:
-    if _media_budget_gate_factory is None:
-        raise AppError(
-            "MEDIA_BUDGET_SETTLEMENT_UNAVAILABLE",
-            "비용 Hold 정산기가 구성되지 않아 이미지 작업을 종료하지 않았습니다.",
-            503,
-        )
-    return _media_budget_gate_factory(session)
+    if _media_budget_gate_factory is not None:
+        return _media_budget_gate_factory(session)
+
+    from blogops.domain.billing.adapters import create_media_budget_gate
+
+    return create_media_budget_gate(session)
 
 
 def _worker_principal(*, workspace_id: UUID, subject_id: UUID) -> Principal:

@@ -16,7 +16,10 @@ from sqlalchemy.ext.asyncio import (
 
 from blogops.core.config import get_settings
 from blogops.core.context import Principal
+from blogops.core.errors import AppError
 from blogops.core.permissions import get_principal
+
+_PLATFORM_SESSION_PERMISSIONS = frozenset({"platform:operate", "platform:approve"})
 
 
 class Database:
@@ -70,6 +73,15 @@ async def apply_workspace_scope(session: AsyncSession, workspace_id: UUID) -> No
     )
 
 
+async def apply_platform_scope(session: AsyncSession, operator_id: UUID) -> None:
+    """Bind a verified platform operator to the current database transaction."""
+
+    await session.execute(
+        text("SELECT set_config('app.current_platform_operator_id', :operator_id, true)"),
+        {"operator_id": str(operator_id)},
+    )
+
+
 async def get_tenant_session(
     principal: Annotated[Principal, Depends(get_principal)],
 ) -> AsyncIterator[AsyncSession]:
@@ -78,4 +90,18 @@ async def get_tenant_session(
     async with database.session_factory() as session:
         async with session.begin():
             await apply_workspace_scope(session, principal.workspace_id)
+            yield session
+
+
+async def get_platform_session(
+    principal: Annotated[Principal, Depends(get_principal)],
+) -> AsyncIterator[AsyncSession]:
+    """Open a transaction scoped to an authenticated platform operator."""
+
+    if not principal.permissions.intersection(_PLATFORM_SESSION_PERMISSIONS):
+        raise AppError("PERMISSION_DENIED", "플랫폼 운영 권한이 필요합니다.", 403)
+    database = get_database()
+    async with database.session_factory() as session:
+        async with session.begin():
+            await apply_platform_scope(session, principal.subject_id)
             yield session

@@ -67,13 +67,12 @@ def configure_bulk_budget_gate_factory(factory: BulkBudgetGateFactory) -> None:
 
 
 def _budget_gate(session: AsyncSession) -> BulkBudgetGate:
-    if _budget_gate_factory is None:
-        raise AppError(
-            "BULK_BUDGET_SETTLEMENT_UNAVAILABLE",
-            "비용 Hold 정산기가 구성되지 않아 대량 작업을 종료하지 않았습니다.",
-            503,
-        )
-    return _budget_gate_factory(session)
+    if _budget_gate_factory is not None:
+        return _budget_gate_factory(session)
+
+    from blogops.domain.billing.adapters import create_bulk_budget_gate
+
+    return create_bulk_budget_gate(session)
 
 
 async def _job(
