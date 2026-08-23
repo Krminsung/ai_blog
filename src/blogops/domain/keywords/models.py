@@ -53,7 +53,7 @@ class KeywordProviderConnection(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ),
         CheckConstraint(
             "quota_remaining IS NULL OR quota_remaining >= 0",
-            name="keyword_provider_remaining_nonnegative",
+            name="provider_remaining_nonnegative",
         ),
         Index("ix_keyword_provider_workspace_state", "workspace_id", "state"),
         Index("ix_keyword_provider_quota_reset", "workspace_id", "quota_reset_at"),
@@ -216,7 +216,7 @@ class KeywordResearchItem(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ),
         UniqueConstraint("workspace_id", "job_id", "row_no", name="keyword_research_job_row"),
         CheckConstraint("row_no > 0", name="keyword_research_row_positive"),
-        CheckConstraint("attempt >= 0", name="keyword_research_item_attempt_nonnegative"),
+        CheckConstraint("attempt >= 0", name="research_item_attempt_nonnegative"),
         Index("ix_keyword_items_job_state", "workspace_id", "job_id", "state"),
     )
 
@@ -379,7 +379,7 @@ class KeywordScoreProfile(UUIDPrimaryKeyMixin, Base):
     __table_args__ = (
         UniqueConstraint("workspace_id", "id", name="keyword_score_profile_workspace_id"),
         UniqueConstraint("workspace_id", "name", "version", name="keyword_score_profile_version"),
-        CheckConstraint("version > 0", name="keyword_score_profile_version_positive"),
+        CheckConstraint("version > 0", name="score_profile_version_positive"),
         Index("ix_keyword_score_profiles_active", "workspace_id", "is_active"),
     )
 

@@ -258,7 +258,7 @@ class PlanningBoardColumn(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         UniqueConstraint("workspace_id", "id", name="planning_board_column_workspace_id"),
         UniqueConstraint("workspace_id", "key", name="planning_board_column_key"),
         UniqueConstraint("workspace_id", "position", name="planning_board_column_position"),
-        CheckConstraint("position >= 0", name="planning_board_column_position_nonnegative"),
+        CheckConstraint("position >= 0", name="board_position_nonnegative"),
         CheckConstraint("lock_version > 0", name="planning_board_column_lock_positive"),
     )
 
@@ -500,9 +500,9 @@ class CalendarRecurrence(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             ["content_briefs.workspace_id", "content_briefs.id"],
             ondelete="RESTRICT",
         ),
-        CheckConstraint("interval > 0", name="planning_recurrence_interval_positive"),
-        CheckConstraint("ends_at IS NULL OR ends_at > starts_at", name="planning_recurrence_dates_ordered"),
-        CheckConstraint("lock_version > 0", name="planning_recurrence_lock_positive"),
+        CheckConstraint("interval > 0", name="recurrence_interval_positive"),
+        CheckConstraint("ends_at IS NULL OR ends_at > starts_at", name="recurrence_dates_ordered"),
+        CheckConstraint("lock_version > 0", name="recurrence_lock_positive"),
         Index("ix_planning_recurrence_workspace_active", "workspace_id", "active"),
     )
 
