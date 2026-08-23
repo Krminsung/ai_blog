@@ -118,6 +118,7 @@ services:
     image: minio/mc:RELEASE.2024-10-08T09-37-26Z
     restart: "no"
     environment:
+      MC_CONFIG_DIR: /tmp/.mc
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
       BLOGOPS_S3_BUCKET: ${BLOGOPS_S3_BUCKET:-blogops}
