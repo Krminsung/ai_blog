@@ -1,6 +1,9 @@
 """Direct C0/C1 security, privacy, recovery, and GA contract coverage."""
 
 from datetime import UTC, datetime, timedelta
+from inspect import signature
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -10,9 +13,18 @@ from sqlalchemy import event
 from blogops.api.router import api_router
 from blogops.core.errors import AppError
 from blogops.core.permissions import Permission
-from blogops.domain.operations.enums import GAGate, HealthStatus
+from blogops.domain.operations.enums import (
+    BackupRunState,
+    GAAssessmentState,
+    GAGate,
+    HealthStatus,
+    RecoveryExerciseState,
+)
 from blogops.domain.operations.models import ServiceComponent, _service_component_frozen
-from blogops.domain.operations.providers import FailClosedOperationsAdapters
+from blogops.domain.operations.providers import (
+    FailClosedOperationsAdapters,
+    GAEvidenceVerifier,
+)
 from blogops.domain.operations.rules import (
     ensure_incident_transition,
     evaluate_ga_evidence,
@@ -20,7 +32,15 @@ from blogops.domain.operations.rules import (
     validate_backup_policy,
     validate_health_observation,
 )
+from blogops.domain.operations.service import (
+    OperationsService,
+    _creation_guard_key as operations_creation_guard_key,
+    _is_retry_exhausted_failure,
+    _stored_attempt_error,
+)
 from blogops.domain.operations.tasks import (
+    _is_retryable_operations_error,
+    _retry_delay,
     process_backup_task,
     process_ga_assessment_task,
     process_recovery_task,
@@ -48,6 +68,10 @@ from blogops.domain.security.rules import (
 from blogops.domain.security.schemas import (
     CopyrightNoticeCreate,
     PrivacyRequestCreate,
+)
+from blogops.domain.security.service import (
+    SecurityService,
+    _creation_guard_key as security_creation_guard_key,
 )
 from blogops.domain.security.tasks import (
     process_copyright_case_task,
@@ -402,6 +426,83 @@ def test_service_component_identity_fields_are_frozen_after_insert() -> None:
         "before_update",
         _service_component_frozen,
     )
+
+
+@pytest.mark.asyncio
+async def test_stage9_creation_guards_use_stable_scoped_transaction_keys() -> None:
+    workspace_id = uuid4()
+    actor_id = uuid4()
+    identity = (workspace_id, actor_id, "DELETE", "same:key")
+    namespace = "privacy-request-idempotency"
+    guard_key = security_creation_guard_key(namespace, *identity)
+
+    assert guard_key == security_creation_guard_key(namespace, *identity)
+    assert guard_key != security_creation_guard_key(
+        namespace, uuid4(), actor_id, "DELETE", "same:key"
+    )
+    assert guard_key != security_creation_guard_key(
+        namespace, workspace_id, actor_id, "DELETE:same", "key"
+    )
+    assert len(guard_key.rsplit(":", 1)[-1]) == 64
+
+    security_session = SimpleNamespace(execute=AsyncMock())
+    await SecurityService(security_session)._lock_creation_guard(
+        namespace, *identity
+    )
+    statement, parameters = security_session.execute.await_args.args
+    assert "pg_advisory_xact_lock" in str(statement)
+    assert "hashtextextended" in str(statement)
+    assert parameters == {"guard_key": guard_key}
+
+    operations_session = SimpleNamespace(execute=AsyncMock())
+    await OperationsService(operations_session)._lock_creation_guard(
+        "backup-run-idempotency", "platform", "same:key"
+    )
+    _, operations_parameters = operations_session.execute.await_args.args
+    assert operations_parameters == {
+        "guard_key": operations_creation_guard_key(
+            "backup-run-idempotency", "platform", "same:key"
+        )
+    }
+
+
+def test_operations_retries_only_transient_failures_with_bounded_backoff() -> None:
+    assert _is_retryable_operations_error(
+        AppError("UPSTREAM_TIMEOUT", "timeout", 408)
+    )
+    assert _is_retryable_operations_error(
+        AppError("UPSTREAM_RATE_LIMITED", "rate limited", 429)
+    )
+    assert _is_retryable_operations_error(
+        AppError("UPSTREAM_UNAVAILABLE", "unavailable", 503)
+    )
+    assert _is_retryable_operations_error(TimeoutError())
+    assert _is_retryable_operations_error(ConnectionError())
+
+    assert not _is_retryable_operations_error(
+        AppError("BACKUP_RESULT_INVALID", "invalid evidence", 503)
+    )
+    assert not _is_retryable_operations_error(
+        AppError("BACKUP_POLICY_INVALID", "invalid policy", 422)
+    )
+    assert not _is_retryable_operations_error(RuntimeError("programming error"))
+    assert [_retry_delay(value) for value in range(3)] == [5, 10, 20]
+    assert _retry_delay(99) == 300
+
+    exhausted = _stored_attempt_error("UPSTREAM_TIMEOUT", retry_exhausted=True)
+    assert _is_retry_exhausted_failure(exhausted)
+    assert len(exhausted) <= 120
+    assert {
+        BackupRunState.RETRYING.value,
+        RecoveryExerciseState.RETRYING.value,
+        GAAssessmentState.RETRYING.value,
+    } == {"RETRYING"}
+    assert process_backup_task.max_retries == 3
+    assert process_recovery_task.max_retries == 3
+    assert process_ga_assessment_task.max_retries == 3
+    assert "idempotency_key" in signature(
+        GAEvidenceVerifier.verify_release
+    ).parameters
 
 
 def test_stage9_public_and_authenticated_routes_have_distinct_boundaries() -> None:

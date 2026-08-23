@@ -11,6 +11,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
@@ -347,6 +348,13 @@ class WorkspaceInvitation(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
 class WorkspaceAuthenticationPolicy(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "workspace_authentication_policies"
+    __table_args__ = (
+        CheckConstraint(
+            "jsonb_typeof(require_mfa_role_keys) = 'array' "
+            "AND require_mfa_role_keys @> '[\"owner\", \"admin\"]'::jsonb",
+            name="auth_policy_privileged_mfa",
+        ),
+    )
 
     workspace_id: Mapped[UUID] = mapped_column(
         ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, unique=True
@@ -356,7 +364,11 @@ class WorkspaceAuthenticationPolicy(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     lockout_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=900)
     access_token_ttl_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=900)
     session_ttl_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=2_592_000)
-    require_mfa_role_keys: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    require_mfa_role_keys: Mapped[list[str]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=lambda: ["owner", "admin"],
+    )
     password_login_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     sso_enforced_domains: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
 

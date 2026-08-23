@@ -72,11 +72,45 @@ from blogops.services.audit import append_audit_log
 from blogops.services.outbox import add_outbox_event
 
 _SCHEMA_VERSION = "1.0"
+_RETRY_EXHAUSTED_PREFIX = "RETRY_EXHAUSTED:"
+
+
+def _creation_guard_key(namespace: str, *identity: object) -> str:
+    """Build an unambiguous, stable key for a creation transaction lock."""
+    digest = canonical_json_hash(
+        {"namespace": namespace, "identity": list(identity)}
+    )
+    return f"blogops:stage9:create:{namespace}:{digest}"
+
+
+def _stored_attempt_error(code: str, *, retry_exhausted: bool) -> str:
+    normalized = (code or "OPERATIONS_EXECUTION_FAILED").strip()
+    if retry_exhausted:
+        return (
+            _RETRY_EXHAUSTED_PREFIX
+            + normalized[: 120 - len(_RETRY_EXHAUSTED_PREFIX)]
+        )
+    return normalized[:120]
+
+
+def _is_retry_exhausted_failure(code: str | None) -> bool:
+    return bool(code and code.startswith(_RETRY_EXHAUSTED_PREFIX))
 
 
 class OperationsService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+
+    async def _lock_creation_guard(
+        self, namespace: str, *identity: object
+    ) -> None:
+        await self._session.execute(
+            text(
+                "SELECT pg_advisory_xact_lock("
+                "hashtextextended(:guard_key, 0))"
+            ),
+            {"guard_key": _creation_guard_key(namespace, *identity)},
+        )
 
     async def _record(
         self,
@@ -317,6 +351,9 @@ class OperationsService:
         *,
         idempotency_key: str,
     ) -> tuple[BackupRun, bool]:
+        await self._lock_creation_guard(
+            "backup-run-idempotency", "platform", idempotency_key
+        )
         existing = await self._session.scalar(
             select(BackupRun).where(BackupRun.idempotency_key == idempotency_key)
         )
@@ -361,10 +398,15 @@ class OperationsService:
         self, run_id: UUID, *, controller: BackupController
     ) -> BackupRun:
         value = await self._backup_run(run_id, lock=True)
-        if value.state != BackupRunState.QUEUED.value:
+        if value.state not in {
+            BackupRunState.QUEUED.value,
+            BackupRunState.RETRYING.value,
+        }:
             return value
         value.state = BackupRunState.RUNNING.value
         value.attempt_count += 1
+        value.failure_code = None
+        value.completed_at = None
         value.started_at = datetime.now(UTC)
         await self._session.flush()
         result = await controller.execute_backup(
@@ -446,11 +488,102 @@ class OperationsService:
 
     async def fail_backup(self, run_id: UUID, *, code: str) -> BackupRun:
         value = await self._backup_run(run_id, lock=True)
-        if value.state in {BackupRunState.QUEUED.value, BackupRunState.RUNNING.value}:
+        if value.state in {
+            BackupRunState.QUEUED.value,
+            BackupRunState.RUNNING.value,
+            BackupRunState.RETRYING.value,
+        }:
             value.state = BackupRunState.FAILED.value
             value.failure_code = code[:120]
             value.completed_at = datetime.now(UTC)
         return value
+
+    async def record_backup_attempt_error(
+        self,
+        run_id: UUID,
+        *,
+        code: str,
+        retry: bool,
+        retry_exhausted: bool,
+    ) -> tuple[BackupRun, bool]:
+        value = await self._backup_run(run_id, lock=True)
+        if value.state not in {
+            BackupRunState.QUEUED.value,
+            BackupRunState.RUNNING.value,
+            BackupRunState.RETRYING.value,
+        }:
+            return value, False
+        if value.state != BackupRunState.RUNNING.value:
+            value.attempt_count += 1
+        value.failure_code = _stored_attempt_error(
+            code, retry_exhausted=retry_exhausted
+        )
+        value.provider_run_ref = None
+        value.started_at = None
+        if retry:
+            value.state = BackupRunState.RETRYING.value
+            value.completed_at = None
+        else:
+            value.state = BackupRunState.FAILED.value
+            value.completed_at = datetime.now(UTC)
+        await self._session.flush()
+        await self._record(
+            principal=None,
+            action=(
+                "operations.backup.retry_scheduled"
+                if retry
+                else "operations.backup.failed"
+            ),
+            target_type="backup_run",
+            target_id=value.id,
+            details={
+                "attempt_count": value.attempt_count,
+                "failure_code": value.failure_code,
+            },
+        )
+        return value, retry
+
+    async def retry_backup(
+        self, principal: Principal, run_id: UUID
+    ) -> tuple[BackupRun, bool]:
+        value = await self._backup_run(run_id, lock=True)
+        if value.state in {
+            BackupRunState.QUEUED.value,
+            BackupRunState.RETRYING.value,
+        }:
+            return value, False
+        if (
+            value.state != BackupRunState.FAILED.value
+            or not _is_retry_exhausted_failure(value.failure_code)
+        ):
+            raise AppError(
+                "OPERATIONS_JOB_NOT_RETRYABLE",
+                "일시 장애로 재시도 한도를 소진한 백업 작업만 재시도할 수 있습니다.",
+                409,
+            )
+        evidence_id = await self._session.scalar(
+            select(BackupEvidence.id).where(BackupEvidence.run_id == value.id)
+        )
+        if evidence_id is not None:
+            raise AppError(
+                "OPERATIONS_JOB_NOT_RETRYABLE",
+                "증거가 확정된 백업 작업은 동일 작업에서 재시도할 수 없습니다.",
+                409,
+            )
+        value.state = BackupRunState.RETRYING.value
+        value.failure_code = None
+        value.provider_run_ref = None
+        value.started_at = None
+        value.completed_at = None
+        await self._session.flush()
+        await self._record(
+            principal=principal,
+            action="operations.backup.retry_requested",
+            target_type="backup_run",
+            target_id=value.id,
+            details={"attempt_count": value.attempt_count},
+        )
+        return value, True
 
     async def get_backup_run(self, run_id: UUID) -> BackupRun:
         return await self._backup_run(run_id)
@@ -503,6 +636,9 @@ class OperationsService:
         *,
         idempotency_key: str,
     ) -> tuple[RecoveryExercise, bool]:
+        await self._lock_creation_guard(
+            "recovery-exercise-idempotency", "platform", idempotency_key
+        )
         existing = await self._session.scalar(
             select(RecoveryExercise).where(
                 RecoveryExercise.idempotency_key == idempotency_key
@@ -563,7 +699,10 @@ class OperationsService:
         self, exercise_id: UUID, *, controller: RecoveryController
     ) -> RecoveryExercise:
         value = await self._recovery_exercise(exercise_id, lock=True)
-        if value.state != RecoveryExerciseState.QUEUED.value:
+        if value.state not in {
+            RecoveryExerciseState.QUEUED.value,
+            RecoveryExerciseState.RETRYING.value,
+        }:
             return value
         backup = await self._session.scalar(
             select(BackupEvidence).where(BackupEvidence.id == value.backup_evidence_id)
@@ -576,6 +715,9 @@ class OperationsService:
                 "RECOVERY_INPUT_MISSING", "복구 훈련 입력 증거가 없습니다.", 503
             )
         value.state = RecoveryExerciseState.RUNNING.value
+        value.attempt_count += 1
+        value.failure_code = None
+        value.completed_at = None
         value.started_at = datetime.now(UTC)
         await self._session.flush()
         result = await controller.execute_recovery(
@@ -654,11 +796,99 @@ class OperationsService:
         if value.state in {
             RecoveryExerciseState.QUEUED.value,
             RecoveryExerciseState.RUNNING.value,
+            RecoveryExerciseState.RETRYING.value,
         }:
             value.state = RecoveryExerciseState.FAILED.value
             value.failure_code = code[:120]
             value.completed_at = datetime.now(UTC)
         return value
+
+    async def record_recovery_attempt_error(
+        self,
+        exercise_id: UUID,
+        *,
+        code: str,
+        retry: bool,
+        retry_exhausted: bool,
+    ) -> tuple[RecoveryExercise, bool]:
+        value = await self._recovery_exercise(exercise_id, lock=True)
+        if value.state not in {
+            RecoveryExerciseState.QUEUED.value,
+            RecoveryExerciseState.RUNNING.value,
+            RecoveryExerciseState.RETRYING.value,
+        }:
+            return value, False
+        if value.state != RecoveryExerciseState.RUNNING.value:
+            value.attempt_count += 1
+        value.failure_code = _stored_attempt_error(
+            code, retry_exhausted=retry_exhausted
+        )
+        value.provider_run_ref = None
+        value.started_at = None
+        if retry:
+            value.state = RecoveryExerciseState.RETRYING.value
+            value.completed_at = None
+        else:
+            value.state = RecoveryExerciseState.FAILED.value
+            value.completed_at = datetime.now(UTC)
+        await self._session.flush()
+        await self._record(
+            principal=None,
+            action=(
+                "operations.recovery_exercise.retry_scheduled"
+                if retry
+                else "operations.recovery_exercise.failed"
+            ),
+            target_type="recovery_exercise",
+            target_id=value.id,
+            details={
+                "attempt_count": value.attempt_count,
+                "failure_code": value.failure_code,
+            },
+        )
+        return value, retry
+
+    async def retry_recovery(
+        self, principal: Principal, exercise_id: UUID
+    ) -> tuple[RecoveryExercise, bool]:
+        value = await self._recovery_exercise(exercise_id, lock=True)
+        if value.state in {
+            RecoveryExerciseState.QUEUED.value,
+            RecoveryExerciseState.RETRYING.value,
+        }:
+            return value, False
+        if (
+            value.state != RecoveryExerciseState.FAILED.value
+            or not _is_retry_exhausted_failure(value.failure_code)
+        ):
+            raise AppError(
+                "OPERATIONS_JOB_NOT_RETRYABLE",
+                "일시 장애로 재시도 한도를 소진한 복구 작업만 재시도할 수 있습니다.",
+                409,
+            )
+        evidence_id = await self._session.scalar(
+            select(RecoveryEvidence.id).where(RecoveryEvidence.exercise_id == value.id)
+        )
+        if evidence_id is not None:
+            raise AppError(
+                "OPERATIONS_JOB_NOT_RETRYABLE",
+                "증거가 확정된 복구 작업은 동일 작업에서 재시도할 수 없습니다.",
+                409,
+            )
+        value.state = RecoveryExerciseState.RETRYING.value
+        value.failure_code = None
+        value.provider_run_ref = None
+        value.started_at = None
+        value.completed_at = None
+        await self._session.flush()
+        await self._record(
+            principal=principal,
+            action="operations.recovery_exercise.retry_requested",
+            target_type="recovery_exercise",
+            target_id=value.id,
+            details={"attempt_count": value.attempt_count},
+        )
+        return value, True
 
     async def get_recovery_exercise(self, exercise_id: UUID) -> RecoveryExercise:
         return await self._recovery_exercise(exercise_id)
@@ -971,6 +1201,12 @@ class OperationsService:
     ) -> tuple[GAAssessment, bool]:
         payload = data.model_dump(mode="json")
         request_hash = canonical_json_hash(payload)
+        await self._lock_creation_guard(
+            "ga-assessment-idempotency", "platform", idempotency_key
+        )
+        await self._lock_creation_guard(
+            "ga-assessment-release", "platform", data.release_ref
+        )
         existing = await self._session.scalar(
             select(GAAssessment).where(
                 (GAAssessment.idempotency_key == idempotency_key)
@@ -1011,14 +1247,21 @@ class OperationsService:
         policy: OperationsPolicy,
     ) -> GAAssessment:
         value = await self._ga_assessment(assessment_id, lock=True)
-        if value.state != GAAssessmentState.QUEUED.value:
+        if value.state not in {
+            GAAssessmentState.QUEUED.value,
+            GAAssessmentState.RETRYING.value,
+        }:
             return value
         value.state = GAAssessmentState.VERIFYING.value
+        value.attempt_count += 1
+        value.failure_code = None
+        value.verified_at = None
         await self._session.flush()
         evidence = await verifier.verify_release(
             assessment_id=value.id,
             release_ref=value.release_ref,
             artifact_refs=tuple(value.artifact_refs),
+            idempotency_key=value.idempotency_key,
         )
         maximum_age_days = await policy.maximum_ga_evidence_age_days()
         if maximum_age_days <= 0 or maximum_age_days > 365:
@@ -1102,11 +1345,97 @@ class OperationsService:
         if value.state in {
             GAAssessmentState.QUEUED.value,
             GAAssessmentState.VERIFYING.value,
+            GAAssessmentState.RETRYING.value,
         }:
             value.state = GAAssessmentState.FAILED.value
             value.failure_code = code[:120]
             value.verified_at = datetime.now(UTC)
         return value
+
+    async def record_ga_attempt_error(
+        self,
+        assessment_id: UUID,
+        *,
+        code: str,
+        retry: bool,
+        retry_exhausted: bool,
+    ) -> tuple[GAAssessment, bool]:
+        value = await self._ga_assessment(assessment_id, lock=True)
+        if value.state not in {
+            GAAssessmentState.QUEUED.value,
+            GAAssessmentState.VERIFYING.value,
+            GAAssessmentState.RETRYING.value,
+        }:
+            return value, False
+        if value.state != GAAssessmentState.VERIFYING.value:
+            value.attempt_count += 1
+        value.failure_code = _stored_attempt_error(
+            code, retry_exhausted=retry_exhausted
+        )
+        value.decision_hash = None
+        if retry:
+            value.state = GAAssessmentState.RETRYING.value
+            value.verified_at = None
+        else:
+            value.state = GAAssessmentState.FAILED.value
+            value.verified_at = datetime.now(UTC)
+        await self._session.flush()
+        await self._record(
+            principal=None,
+            action=(
+                "operations.ga_assessment.retry_scheduled"
+                if retry
+                else "operations.ga_assessment.failed"
+            ),
+            target_type="ga_assessment",
+            target_id=value.id,
+            details={
+                "attempt_count": value.attempt_count,
+                "failure_code": value.failure_code,
+            },
+        )
+        return value, retry
+
+    async def retry_ga_assessment(
+        self, principal: Principal, assessment_id: UUID
+    ) -> tuple[GAAssessment, bool]:
+        value = await self._ga_assessment(assessment_id, lock=True)
+        if value.state in {
+            GAAssessmentState.QUEUED.value,
+            GAAssessmentState.RETRYING.value,
+        }:
+            return value, False
+        if (
+            value.state != GAAssessmentState.FAILED.value
+            or not _is_retry_exhausted_failure(value.failure_code)
+        ):
+            raise AppError(
+                "OPERATIONS_JOB_NOT_RETRYABLE",
+                "일시 장애로 재시도 한도를 소진한 GA 검증만 재시도할 수 있습니다.",
+                409,
+            )
+        evidence_id = await self._session.scalar(
+            select(GAGateEvidence.id).where(GAGateEvidence.assessment_id == value.id)
+        )
+        if evidence_id is not None:
+            raise AppError(
+                "OPERATIONS_JOB_NOT_RETRYABLE",
+                "증거가 확정된 GA 검증은 동일 작업에서 재시도할 수 없습니다.",
+                409,
+            )
+        value.state = GAAssessmentState.RETRYING.value
+        value.failure_code = None
+        value.decision_hash = None
+        value.verified_at = None
+        await self._session.flush()
+        await self._record(
+            principal=principal,
+            action="operations.ga_assessment.retry_requested",
+            target_type="ga_assessment",
+            target_id=value.id,
+            details={"attempt_count": value.attempt_count},
+        )
+        return value, True
 
     async def get_ga_assessment(self, assessment_id: UUID) -> GAAssessment:
         return await self._ga_assessment(assessment_id)

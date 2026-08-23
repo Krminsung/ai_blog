@@ -100,6 +100,7 @@ class GAEvidenceVerifier(Protocol):
         assessment_id: UUID,
         release_ref: str,
         artifact_refs: tuple[str, ...],
+        idempotency_key: str,
     ) -> tuple[VerifiedGateEvidence, ...]: ...
 
 

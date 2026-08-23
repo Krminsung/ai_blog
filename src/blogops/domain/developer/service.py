@@ -15,7 +15,7 @@ from uuid import UUID
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from blogops.core.context import Principal
+from blogops.core.context import Principal, PrincipalKind
 from blogops.core.errors import AppError
 from blogops.db.session import apply_workspace_scope
 from blogops.domain.developer.enums import (
@@ -338,6 +338,7 @@ class DeveloperService:
             session_id=None,
             permissions=frozenset(value.scopes),
             authentication_method="api_key",
+            kind=PrincipalKind.API_KEY,
         )
 
     async def list_api_keys(self, principal: Principal) -> list[ApiKey]:

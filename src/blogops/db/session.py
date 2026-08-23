@@ -15,11 +15,36 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from blogops.core.config import get_settings
-from blogops.core.context import Principal
+from blogops.core.context import Principal, PrincipalKind
 from blogops.core.errors import AppError
 from blogops.core.permissions import get_principal
 
 _PLATFORM_SESSION_PERMISSIONS = frozenset({"platform:operate", "platform:approve"})
+
+
+def ensure_platform_session_assurance(principal: Principal) -> None:
+    """Require a human login session with server-verified MFA for platform scope."""
+
+    if not principal.permissions.intersection(_PLATFORM_SESSION_PERMISSIONS):
+        raise AppError("PERMISSION_DENIED", "플랫폼 운영 권한이 필요합니다.", 403)
+    if principal.kind == PrincipalKind.API_KEY:
+        raise AppError(
+            "PLATFORM_API_KEY_FORBIDDEN",
+            "API Key로는 플랫폼 운영 세션에 접근할 수 없습니다.",
+            403,
+        )
+    if principal.kind != PrincipalKind.USER_SESSION or principal.session_id is None:
+        raise AppError(
+            "PLATFORM_USER_SESSION_REQUIRED",
+            "플랫폼 운영에는 검증된 사용자 세션이 필요합니다.",
+            403,
+        )
+    if not principal.has_platform_assurance:
+        raise AppError(
+            "PLATFORM_MFA_REQUIRED",
+            "플랫폼 운영에는 MFA 인증이 필요합니다.",
+            403,
+        )
 
 
 class Database:
@@ -98,8 +123,7 @@ async def get_platform_session(
 ) -> AsyncIterator[AsyncSession]:
     """Open a transaction scoped to an authenticated platform operator."""
 
-    if not principal.permissions.intersection(_PLATFORM_SESSION_PERMISSIONS):
-        raise AppError("PERMISSION_DENIED", "플랫폼 운영 권한이 필요합니다.", 403)
+    ensure_platform_session_assurance(principal)
     database = get_database()
     async with database.session_factory() as session:
         async with session.begin():
@@ -112,10 +136,16 @@ async def get_job_session(
 ) -> AsyncIterator[AsyncSession]:
     """Open a tenant session that also exposes platform jobs to trusted operators."""
 
+    has_platform_permission = bool(
+        principal.permissions.intersection(_PLATFORM_SESSION_PERMISSIONS)
+    )
+    if has_platform_permission:
+        ensure_platform_session_assurance(principal)
+
     database = get_database()
     async with database.session_factory() as session:
         async with session.begin():
             await apply_workspace_scope(session, principal.workspace_id)
-            if principal.permissions.intersection(_PLATFORM_SESSION_PERMISSIONS):
+            if has_platform_permission:
                 await apply_platform_scope(session, principal.subject_id)
             yield session

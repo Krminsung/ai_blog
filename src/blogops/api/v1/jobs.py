@@ -49,6 +49,12 @@ from blogops.domain.operations.models import (
     GAAssessment,
     RecoveryExercise,
 )
+from blogops.domain.operations.service import OperationsService
+from blogops.domain.operations.tasks import (
+    enqueue_backup,
+    enqueue_ga_assessment,
+    enqueue_recovery,
+)
 from blogops.domain.publishing.models import PublishJob, PublishingConnectionJob
 from blogops.domain.publishing.references import SQLAlchemyPublishingReadinessResolver
 from blogops.domain.publishing.schemas import CancelPublishCreate, RetryPublishCreate
@@ -346,7 +352,7 @@ def _view(kind: str, job: ResolvedJob) -> JobView:
             job_id=job.id,
             kind=kind,
             state=job.state,
-            attempt=0,
+            attempt=job.attempt_count,
             error_code=job.failure_code,
             result={"backup_evidence_id": str(job.backup_evidence_id)},
             created_at=job.created_at,
@@ -358,7 +364,7 @@ def _view(kind: str, job: ResolvedJob) -> JobView:
             job_id=job.id,
             kind=kind,
             state=job.state,
-            attempt=0,
+            attempt=job.attempt_count,
             error_code=job.failure_code,
             result={
                 "release_ref": job.release_ref,
@@ -799,6 +805,27 @@ async def retry_job(
 ) -> JobView:
     kind, job = await _resolve_job(session, principal, job_id)
     _authorize_stage9_job(principal, kind, job)
+    if kind == "BACKUP_RUN" and isinstance(job, BackupRun):
+        updated, should_enqueue = await OperationsService(session).retry_backup(
+            principal, job.id
+        )
+        if should_enqueue:
+            background_tasks.add_task(enqueue_backup, updated.id)
+        return _view(kind, updated)
+    if kind == "RECOVERY_EXERCISE" and isinstance(job, RecoveryExercise):
+        updated, should_enqueue = await OperationsService(session).retry_recovery(
+            principal, job.id
+        )
+        if should_enqueue:
+            background_tasks.add_task(enqueue_recovery, updated.id)
+        return _view(kind, updated)
+    if kind == "GA_ASSESSMENT" and isinstance(job, GAAssessment):
+        updated, should_enqueue = await OperationsService(
+            session
+        ).retry_ga_assessment(principal, job.id)
+        if should_enqueue:
+            background_tasks.add_task(enqueue_ga_assessment, updated.id)
+        return _view(kind, updated)
     if kind == "ANALYTICS_SYNC" and isinstance(job, AnalyticsSyncRun):
         _require(principal, Permission.CONTENT_WRITE)
         if idempotency_key is None:

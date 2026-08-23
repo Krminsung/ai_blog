@@ -105,6 +105,14 @@ from blogops.services.outbox import add_outbox_event
 _SCHEMA_VERSION = "1.0"
 
 
+def _creation_guard_key(namespace: str, *identity: object) -> str:
+    """Build an unambiguous, stable key for a creation transaction lock."""
+    digest = canonical_json_hash(
+        {"namespace": namespace, "identity": list(identity)}
+    )
+    return f"blogops:stage9:create:{namespace}:{digest}"
+
+
 def _same_request(existing_hash: str, request_hash: str) -> None:
     if existing_hash != request_hash:
         raise AppError(
@@ -120,6 +128,17 @@ class SecurityService:
 
     async def _scope(self, workspace_id: UUID) -> None:
         await apply_workspace_scope(self._session, workspace_id)
+
+    async def _lock_creation_guard(
+        self, namespace: str, *identity: object
+    ) -> None:
+        await self._session.execute(
+            text(
+                "SELECT pg_advisory_xact_lock("
+                "hashtextextended(:guard_key, 0))"
+            ),
+            {"guard_key": _creation_guard_key(namespace, *identity)},
+        )
 
     async def _lock_legal_hold_guard(self, workspace_id: UUID) -> None:
         await self._session.execute(
@@ -229,6 +248,11 @@ class SecurityService:
         idempotency_key: str,
     ) -> tuple[RetentionSweep, bool]:
         await self._scope(principal.workspace_id)
+        await self._lock_creation_guard(
+            "retention-sweep-idempotency",
+            principal.workspace_id,
+            idempotency_key,
+        )
         await self._lock_legal_hold_guard(principal.workspace_id)
         existing = await self._session.scalar(
             select(RetentionSweep).where(
@@ -720,6 +744,20 @@ class SecurityService:
             "external_request_ref": external_request_ref,
         }
         request_hash = canonical_json_hash(request_payload)
+        await self._lock_creation_guard(
+            "privacy-request-idempotency",
+            principal.workspace_id,
+            principal.subject_id,
+            data.kind.value,
+            idempotency_key,
+        )
+        if external_request_ref is not None:
+            await self._lock_creation_guard(
+                "privacy-request-external",
+                principal.workspace_id,
+                source,
+                external_request_ref,
+            )
         existing = await self._session.scalar(
             select(PrivacyRequest).where(
                 PrivacyRequest.workspace_id == principal.workspace_id,
@@ -728,6 +766,14 @@ class SecurityService:
                 PrivacyRequest.idempotency_key == idempotency_key,
             )
         )
+        if existing is None and external_request_ref is not None:
+            existing = await self._session.scalar(
+                select(PrivacyRequest).where(
+                    PrivacyRequest.workspace_id == principal.workspace_id,
+                    PrivacyRequest.source == source,
+                    PrivacyRequest.external_request_ref == external_request_ref,
+                )
+            )
         if existing is not None:
             _same_request(existing.request_hash, request_hash)
             return existing, False
@@ -807,6 +853,12 @@ class SecurityService:
                 503,
             )
         raw_payload_hash = hashlib.sha256(body).hexdigest()
+        await self._lock_creation_guard(
+            "provider-deletion-event",
+            "global",
+            provider,
+            verified.provider_event_id,
+        )
         existing_event = await self._session.scalar(
             select(ProviderDeletionEvent).where(
                 ProviderDeletionEvent.provider == provider,
@@ -1973,6 +2025,12 @@ class SecurityService:
         require_secret_reference(data.claimant_contact_ref, path="claimant_contact_ref")
         payload = data.model_dump(mode="json")
         request_hash = canonical_json_hash(payload)
+        await self._lock_creation_guard(
+            "copyright-case-idempotency",
+            principal.workspace_id,
+            principal.subject_id,
+            idempotency_key,
+        )
         existing = await self._session.scalar(
             select(CopyrightCase).where(
                 CopyrightCase.workspace_id == principal.workspace_id,

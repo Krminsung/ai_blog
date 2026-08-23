@@ -300,6 +300,7 @@ def upgrade() -> None:
     sa.Column('idempotency_key', sa.String(length=255), nullable=False),
     sa.Column('requested_by', sa.Uuid(), nullable=False),
     sa.Column('state', sa.String(length=16), nullable=False),
+    sa.Column('attempt_count', sa.Integer(), nullable=False),
     sa.Column('decision_hash', sa.String(length=64), nullable=True),
     sa.Column('requested_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.Column('verified_at', sa.DateTime(timezone=True), nullable=True),
@@ -308,6 +309,7 @@ def upgrade() -> None:
     sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.CheckConstraint('attempt_count >= 0', name=op.f('ck_operations_ga_assessments_attempt_nonnegative')),
     sa.CheckConstraint('lock_version > 0', name=op.f('ck_operations_ga_assessments_lock_positive')),
     sa.PrimaryKeyConstraint('id', name=op.f('pk_operations_ga_assessments')),
     sa.UniqueConstraint('idempotency_key', name='operations_ga_idempotency'),
@@ -1034,6 +1036,7 @@ def upgrade() -> None:
     sa.Column('idempotency_key', sa.String(length=255), nullable=False),
     sa.Column('requested_by', sa.Uuid(), nullable=False),
     sa.Column('state', sa.String(length=24), nullable=False),
+    sa.Column('attempt_count', sa.Integer(), nullable=False),
     sa.Column('provider_run_ref', sa.String(length=500), nullable=True),
     sa.Column('requested_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.Column('started_at', sa.DateTime(timezone=True), nullable=True),
@@ -1043,6 +1046,7 @@ def upgrade() -> None:
     sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.CheckConstraint('attempt_count >= 0', name=op.f('ck_operations_recovery_exercises_attempt_nonnegative')),
     sa.CheckConstraint('lock_version > 0', name=op.f('ck_operations_recovery_exercises_lock_positive')),
     sa.ForeignKeyConstraint(['backup_evidence_id'], ['operations_backup_evidence.id'], name='fk_ops_recovery_backup_evidence', ondelete='RESTRICT'),
     sa.ForeignKeyConstraint(['runbook_version_id'], ['operations_runbook_versions.id'], name='fk_ops_recovery_runbook', ondelete='RESTRICT'),
@@ -1114,9 +1118,34 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_operations_recovery_evidence_exercise_id'), 'operations_recovery_evidence', ['exercise_id'], unique=False)
 
+    # Only the built-in privileged roles receive the Stage 9 security permissions.
+    # This is intentionally retained on downgrade so rollback cannot weaken an
+    # existing system role or alter any user-defined role.
+    op.execute(
+        '''
+        UPDATE public.roles AS role
+        SET permissions = (
+            SELECT jsonb_agg(permission_entry.permission ORDER BY permission_entry.permission)
+            FROM (
+                SELECT DISTINCT permission.value AS permission
+                FROM jsonb_array_elements_text(
+                    (
+                        CASE
+                            WHEN jsonb_typeof(role.permissions) = 'array'
+                                THEN role.permissions
+                            ELSE '[]'::jsonb
+                        END
+                    ) || '["privacy:read", "privacy:manage", "security:read", "security:manage"]'::jsonb
+                ) AS permission(value)
+            ) AS permission_entry
+        )
+        WHERE role.is_system IS TRUE
+          AND role.key IN ('owner', 'admin')
+        '''
+    )
+
     # Existing workspaces must enforce MFA for both privileged tenant roles. This
-    # is intentionally retained on downgrade: weakening an authentication policy
-    # would be a destructive rollback of a security control.
+    # data strengthening is intentionally retained on downgrade.
     op.execute(
         '''
         UPDATE public.workspace_authentication_policies AS policy
@@ -1125,7 +1154,13 @@ def upgrade() -> None:
             FROM (
                 SELECT DISTINCT role.role_key
                 FROM jsonb_array_elements_text(
-                    COALESCE(policy.require_mfa_role_keys, '[]'::jsonb)
+                    (
+                        CASE
+                            WHEN jsonb_typeof(policy.require_mfa_role_keys) = 'array'
+                                THEN policy.require_mfa_role_keys
+                            ELSE '[]'::jsonb
+                        END
+                    )
                     || '["owner", "admin"]'::jsonb
                 ) AS role(role_key)
             ) AS required_role
@@ -1135,6 +1170,12 @@ def upgrade() -> None:
             @> '["owner", "admin"]'::jsonb
         )
         '''
+    )
+    op.create_check_constraint(
+        op.f('ck_workspace_authentication_policies_auth_policy_privileged_mfa'),
+        'workspace_authentication_policies',
+        "jsonb_typeof(require_mfa_role_keys) = 'array' "
+        "AND require_mfa_role_keys @> '[\"owner\", \"admin\"]'::jsonb",
     )
 
     for table_name in SECURITY_TABLES:
@@ -1367,6 +1408,11 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     # ### commands auto generated by Alembic - please adjust! ###
+    op.drop_constraint(
+        op.f('ck_workspace_authentication_policies_auth_policy_privileged_mfa'),
+        'workspace_authentication_policies',
+        type_='check',
+    )
     op.execute(
         'DROP POLICY IF EXISTS audit_logs_stage9_platform ON public.audit_logs'
     )

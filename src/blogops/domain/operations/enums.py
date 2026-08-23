@@ -39,6 +39,7 @@ class OperationalIncidentEventKind(StrEnum):
 class BackupRunState(StrEnum):
     QUEUED = "QUEUED"
     RUNNING = "RUNNING"
+    RETRYING = "RETRYING"
     VERIFYING = "VERIFYING"
     SUCCEEDED = "SUCCEEDED"
     FAILED = "FAILED"
@@ -47,6 +48,7 @@ class BackupRunState(StrEnum):
 class RecoveryExerciseState(StrEnum):
     QUEUED = "QUEUED"
     RUNNING = "RUNNING"
+    RETRYING = "RETRYING"
     SUCCEEDED = "SUCCEEDED"
     FAILED = "FAILED"
 
@@ -54,6 +56,7 @@ class RecoveryExerciseState(StrEnum):
 class GAAssessmentState(StrEnum):
     QUEUED = "QUEUED"
     VERIFYING = "VERIFYING"
+    RETRYING = "RETRYING"
     PASSED = "PASSED"
     BLOCKED = "BLOCKED"
     FAILED = "FAILED"

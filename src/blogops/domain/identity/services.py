@@ -12,7 +12,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from blogops.core.context import Principal
+from blogops.core.context import Principal, PrincipalKind
 from blogops.core.errors import AppError
 from blogops.core.permissions import Permission
 from blogops.db.models.foundation import AuditLog
@@ -99,6 +99,28 @@ MFA_CHALLENGE_TTL = timedelta(minutes=5)
 LOGIN_FAILURE_LIMIT = 5
 LOGIN_LOCKOUT = timedelta(minutes=15)
 EMAIL_SECURITY_REQUEST_LIMIT_PER_HOUR = 5
+PRIVILEGED_MFA_ROLE_KEYS = ("owner", "admin")
+
+
+def _validate_required_mfa_role_keys(role_keys: list[str]) -> list[str]:
+    """Normalize role keys while preventing privileged-MFA policy weakening."""
+
+    normalized = list(dict.fromkeys(role_keys))
+    missing = set(PRIVILEGED_MFA_ROLE_KEYS).difference(normalized)
+    if missing:
+        raise AppError(
+            code="PRIVILEGED_MFA_REQUIRED",
+            message="Owner와 Admin 역할에는 MFA가 항상 필요합니다.",
+            status_code=422,
+            fields=[
+                {
+                    "path": "require_mfa_role_keys",
+                    "reason": f"{role_key}_required",
+                }
+                for role_key in sorted(missing)
+            ],
+        )
+    return normalized
 
 
 @dataclass(slots=True)
@@ -875,6 +897,8 @@ class IdentityService:
             session_id=login_session.id,
             permissions=frozenset(role.permissions),
             authentication_method="+".join(login_session.authentication_methods),
+            kind=PrincipalKind.USER_SESSION,
+            mfa_verified_at=login_session.mfa_verified_at,
         )
 
     async def list_sessions(self, user_id: UUID) -> list[LoginSession]:
@@ -2131,6 +2155,8 @@ class WorkspaceService:
             if value is not None:
                 if field_name == "sso_enforced_domains":
                     value = sorted({str(domain).casefold() for domain in value})
+                elif field_name == "require_mfa_role_keys":
+                    value = _validate_required_mfa_role_keys(value)
                 setattr(policy, field_name, value)
         if all(getattr(request, field_name) is None for field_name in request.model_fields_set):
             raise AppError(
@@ -2613,7 +2639,7 @@ def _new_workspace_bundle(
         lockout_seconds=int(LOGIN_LOCKOUT.total_seconds()),
         access_token_ttl_seconds=int(DEFAULT_ACCESS_TTL.total_seconds()),
         session_ttl_seconds=int(DEFAULT_SESSION_TTL.total_seconds()),
-        require_mfa_role_keys=["owner", "admin"],
+        require_mfa_role_keys=list(PRIVILEGED_MFA_ROLE_KEYS),
         password_login_enabled=True,
         sso_enforced_domains=[],
     )

@@ -323,6 +323,7 @@ class RecoveryExercise(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             name="fk_ops_recovery_runbook",
         ),
         UniqueConstraint("idempotency_key", name="operations_recovery_idempotency"),
+        CheckConstraint("attempt_count >= 0", name="attempt_nonnegative"),
         CheckConstraint("lock_version > 0", name="lock_positive"),
         Index("ix_operations_recovery_queue", "state", "requested_at"),
     )
@@ -336,6 +337,7 @@ class RecoveryExercise(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     state: Mapped[str] = mapped_column(
         String(24), nullable=False, default=RecoveryExerciseState.QUEUED.value
     )
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     provider_run_ref: Mapped[str | None] = mapped_column(String(500))
     requested_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
@@ -383,6 +385,7 @@ class GAAssessment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __table_args__ = (
         UniqueConstraint("release_ref", name="operations_ga_release_once"),
         UniqueConstraint("idempotency_key", name="operations_ga_idempotency"),
+        CheckConstraint("attempt_count >= 0", name="attempt_nonnegative"),
         CheckConstraint("lock_version > 0", name="lock_positive"),
         Index("ix_operations_ga_state", "state", "requested_at"),
     )
@@ -395,6 +398,7 @@ class GAAssessment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     state: Mapped[str] = mapped_column(
         String(16), nullable=False, default=GAAssessmentState.QUEUED.value
     )
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     decision_hash: Mapped[str | None] = mapped_column(String(64))
     requested_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

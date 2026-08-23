@@ -254,6 +254,7 @@ class RecoveryExerciseRead(ORMModel):
     rpo_minutes: int
     rto_minutes: int
     state: str
+    attempt_count: int
     provider_run_ref: str | None
     requested_at: datetime
     started_at: datetime | None
@@ -284,6 +285,7 @@ class GAAssessmentRead(ORMModel):
     release_ref: str
     artifact_refs: list[str]
     state: str
+    attempt_count: int
     decision_hash: str | None
     requested_at: datetime
     verified_at: datetime | None
