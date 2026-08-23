@@ -1,0 +1,164 @@
+name: blogops
+
+x-app-environment: &app-environment
+  BLOGOPS_ENVIRONMENT: ${BLOGOPS_ENVIRONMENT:-production}
+  BLOGOPS_DEBUG: "false"
+  BLOGOPS_SECRET_KEY: ${BLOGOPS_SECRET_KEY:?BLOGOPS_SECRET_KEY is required}
+  BLOGOPS_ALLOWED_HOSTS: ${BLOGOPS_ALLOWED_HOSTS:?BLOGOPS_ALLOWED_HOSTS is required}
+  BLOGOPS_CORS_ORIGINS: ${BLOGOPS_CORS_ORIGINS:-}
+  BLOGOPS_DOCS_ENABLED: ${BLOGOPS_DOCS_ENABLED:-false}
+  BLOGOPS_METRICS_ENABLED: ${BLOGOPS_METRICS_ENABLED:-true}
+  BLOGOPS_METRICS_AUTH_TOKEN: ${BLOGOPS_METRICS_AUTH_TOKEN:?BLOGOPS_METRICS_AUTH_TOKEN is required}
+  BLOGOPS_TRUST_PROXY_HEADERS: ${BLOGOPS_TRUST_PROXY_HEADERS:-true}
+  BLOGOPS_DATABASE_URL: ${BLOGOPS_DATABASE_URL:?BLOGOPS_DATABASE_URL is required}
+  BLOGOPS_DATABASE_POOL_SIZE: ${BLOGOPS_DATABASE_POOL_SIZE:-10}
+  BLOGOPS_DATABASE_MAX_OVERFLOW: ${BLOGOPS_DATABASE_MAX_OVERFLOW:-20}
+  BLOGOPS_DATABASE_POOL_TIMEOUT_SECONDS: ${BLOGOPS_DATABASE_POOL_TIMEOUT_SECONDS:-10}
+  BLOGOPS_DATABASE_STATEMENT_TIMEOUT_MS: ${BLOGOPS_DATABASE_STATEMENT_TIMEOUT_MS:-15000}
+  BLOGOPS_REDIS_URL: ${BLOGOPS_REDIS_URL:-redis://redis:6379/0}
+  BLOGOPS_REDIS_HEALTH_TIMEOUT_SECONDS: ${BLOGOPS_REDIS_HEALTH_TIMEOUT_SECONDS:-1}
+  BLOGOPS_DEPENDENCY_HEALTH_TIMEOUT_SECONDS: ${BLOGOPS_DEPENDENCY_HEALTH_TIMEOUT_SECONDS:-2}
+  BLOGOPS_LOG_LEVEL: ${BLOGOPS_LOG_LEVEL:-INFO}
+  BLOGOPS_OTEL_ENABLED: ${BLOGOPS_OTEL_ENABLED:-false}
+  BLOGOPS_OTEL_SERVICE_NAME: ${BLOGOPS_OTEL_SERVICE_NAME:-blogops-api}
+  BLOGOPS_OTEL_EXPORTER_OTLP_ENDPOINT: ${BLOGOPS_OTEL_EXPORTER_OTLP_ENDPOINT:-}
+
+x-app-service: &app-service
+  build:
+    context: .
+    target: runtime
+  image: blogops-api:${BLOGOPS_IMAGE_TAG:-local}
+  restart: unless-stopped
+  init: true
+  environment: *app-environment
+  networks:
+    - ingress
+    - data
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+    redis:
+      condition: service_healthy
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  read_only: true
+  tmpfs:
+    - /tmp:size=64m,mode=1777
+
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.0-pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: blogops
+      POSTGRES_USER: blogops_owner
+      POSTGRES_PASSWORD: ${POSTGRES_OWNER_PASSWORD:?POSTGRES_OWNER_PASSWORD is required}
+      POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:?POSTGRES_APP_PASSWORD is required}
+      POSTGRES_WORKER_PASSWORD: ${POSTGRES_WORKER_PASSWORD:?POSTGRES_WORKER_PASSWORD is required}
+      TZ: UTC
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./deploy/postgres-init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U blogops_owner -d blogops"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    security_opt:
+      - no-new-privileges:true
+
+  redis:
+    image: redis:7.4.1-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redis-data:/data
+    networks:
+      - data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    security_opt:
+      - no-new-privileges:true
+
+  object-storage:
+    image: minio/minio:RELEASE.2024-10-13T13-34-11Z
+    restart: unless-stopped
+    command: ["server", "/data"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+    volumes:
+      - object-storage-data:/data
+    networks:
+      - data
+    expose:
+      - "9000"
+    security_opt:
+      - no-new-privileges:true
+
+  migrate:
+    build:
+      context: .
+      target: runtime
+    image: blogops-api:${BLOGOPS_IMAGE_TAG:-local}
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      <<: *app-environment
+      BLOGOPS_DATABASE_URL: ${BLOGOPS_MIGRATION_DATABASE_URL:?BLOGOPS_MIGRATION_DATABASE_URL is required}
+    networks:
+      - data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+
+  api:
+    <<: *app-service
+    expose:
+      - "8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=2)",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  worker:
+    <<: *app-service
+    command: ["celery", "-A", "blogops.worker:celery_app", "worker", "--loglevel=INFO"]
+    environment:
+      <<: *app-environment
+      BLOGOPS_DATABASE_URL: ${BLOGOPS_WORKER_DATABASE_URL:?BLOGOPS_WORKER_DATABASE_URL is required}
+    stop_grace_period: 60s
+
+volumes:
+  postgres-data:
+  redis-data:
+  object-storage-data:
+
+networks:
+  ingress:
+    name: blogops-ingress
+    external: true
+  data:
+    name: blogops-data
+    internal: true

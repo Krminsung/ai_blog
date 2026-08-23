@@ -1,0 +1,5 @@
+# Validation-only override. Never use this file for an operating deployment.
+services:
+  api:
+    ports:
+      - "${BLOGOPS_TEST_BIND_HOST:-127.0.0.1}:${BLOGOPS_TEST_PORT:-18000}:8000"

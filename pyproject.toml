@@ -1,0 +1,60 @@
+[build-system]
+requires = ["hatchling>=1.25,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "blogops-ai"
+version = "0.1.0"
+description = "Multi-tenant backend for the BlogOps AI content operations platform"
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+license = { text = "Proprietary" }
+authors = [{ name = "Krminsung" }]
+dependencies = [
+  "alembic>=1.13,<2",
+  "asyncpg>=0.29,<1",
+  "celery[redis]>=5.4,<6",
+  "fastapi>=0.115,<1",
+  "opentelemetry-api>=1.27,<2",
+  "opentelemetry-exporter-otlp>=1.27,<2",
+  "opentelemetry-instrumentation-fastapi>=0.48b0,<1",
+  "opentelemetry-instrumentation-sqlalchemy>=0.48b0,<1",
+  "opentelemetry-sdk>=1.27,<2",
+  "prometheus-client>=0.21,<1",
+  "pydantic-settings>=2.5,<3",
+  "redis[hiredis]>=5.1,<7",
+  "sqlalchemy[asyncio]>=2.0.35,<3",
+  "structlog>=24.4,<26",
+  "uvicorn[standard]>=0.30,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "httpx>=0.27,<1",
+  "pytest>=8.3,<9",
+  "pytest-asyncio>=0.24,<1",
+]
+
+[project.scripts]
+blogops-api = "blogops.cli:run_api"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/blogops"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "S"]
+ignore = ["S101"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
