@@ -42,7 +42,7 @@ class KnowledgeSource(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             ["workspace_id", "current_version_id"],
             ["source_versions.workspace_id", "source_versions.id"],
             name="fk_knowledge_sources_current_version",
-            ondelete="SET NULL",
+            ondelete="RESTRICT",
             use_alter=True,
             deferrable=True,
             initially="DEFERRED",
