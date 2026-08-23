@@ -206,6 +206,8 @@ services:
     environment:
       <<: *app-environment
       BLOGOPS_DATABASE_URL: ${BLOGOPS_WORKER_DATABASE_URL:?BLOGOPS_WORKER_DATABASE_URL is required}
+    networks:
+      - data
     depends_on:
       migrate:
         condition: service_completed_successfully
