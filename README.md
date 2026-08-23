@@ -4,7 +4,7 @@ BlogOps AI는 근거 기반 콘텐츠 생성, 품질 검수, 승인, 공식 채�
 통합하는 멀티테넌트 SaaS의 백엔드입니다. 이 저장소에는 프론트엔드나 브라우저 확장
 코드가 포함되지 않습니다.
 
-현재 `5-quality-approval` 단계까지 다음 백엔드 기반을 제공합니다.
+현재 `6-media-bulk` 단계까지 다음 백엔드 기반을 제공합니다.
 
 - FastAPI 애플리케이션과 버전이 있는 `/v1` API 경계
 - PostgreSQL/pgvector, Redis, Celery 기반 실행 환경
@@ -32,6 +32,11 @@ BlogOps AI는 근거 기반 콘텐츠 생성, 품질 검수, 승인, 공식 채�
 - 설명 가능한 7요소 품질 산식, 계층형 정책 우선순위와 예외 불가 Hard Block
 - 콘텐츠 버전·해시를 DB 외래키까지 고정하는 다단계·정족수 승인과 승인 증명
 - 새 버전·복원·재생성·승인 영향 메타데이터 변경 시 기존 승인 자동 무효화
+- 격리 업로드·악성코드/EXIF/PII 검사·불변 버전·권리 판정 기반 미디어 자산 관리
+- 공급자 정책·회로 차단·할당량·비용 Hold를 고정하는 이미지 생성·편집 작업
+- 콘텐츠 버전과 채널·지역·사용 목적의 권리를 함께 고정하는 이미지 계획·사용 계보
+- 서버 검증 CSV/XLSX Snapshot, PII 마스킹, 행 멱등성·재시도·승인 기반 대량 생성
+- 행별 비용 Hold·Spam/가치 Gate·Kill Switch와 서명 Callback·Export·Schedule 경계
 
 전체 백엔드 범위와 단계는 `ai_blog_automation_service_plan.md`와
 `ai_blog_automation_function_spec.md`를 정본으로 삼습니다.

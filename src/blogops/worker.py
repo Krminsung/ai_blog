@@ -20,8 +20,10 @@ celery_app.conf.update(
     result_expires=86_400,
     imports=(
         "blogops.domain.generation.tasks",
+        "blogops.domain.bulk.tasks",
         "blogops.domain.knowledge.tasks",
         "blogops.domain.keywords.tasks",
+        "blogops.domain.media.tasks",
         "blogops.domain.research.tasks",
     ),
 )

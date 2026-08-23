@@ -3,11 +3,13 @@
 from fastapi import APIRouter, Depends
 
 from blogops.api.v1.brands import router as brands_router
+from blogops.api.v1.bulk import router as bulk_router
 from blogops.api.v1.content import router as content_router
 from blogops.api.v1.identity import router as identity_router
 from blogops.api.v1.jobs import router as jobs_router
 from blogops.api.v1.keywords import router as keywords_router
 from blogops.api.v1.knowledge import router as knowledge_router
+from blogops.api.v1.media import router as media_router
 from blogops.api.v1.planning import router as planning_router
 from blogops.api.v1.quality import router as quality_router
 from blogops.api.v1.research import router as research_router
@@ -22,6 +24,8 @@ router.include_router(planning_router, dependencies=[Depends(get_current_princip
 router.include_router(content_router, dependencies=[Depends(get_current_principal)])
 router.include_router(research_router, dependencies=[Depends(get_current_principal)])
 router.include_router(quality_router, dependencies=[Depends(get_current_principal)])
+router.include_router(media_router, dependencies=[Depends(get_current_principal)])
+router.include_router(bulk_router, dependencies=[Depends(get_current_principal)])
 router.include_router(jobs_router, dependencies=[Depends(get_current_principal)])
 
 

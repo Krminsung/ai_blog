@@ -672,6 +672,13 @@ class ContentVersion(UUIDPrimaryKeyMixin, Base):
             "content_hash",
             name="content_version_workspace_id_hash",
         ),
+        UniqueConstraint(
+            "workspace_id",
+            "content_id",
+            "id",
+            "content_hash",
+            name="content_version_exact_identity",
+        ),
         ForeignKeyConstraint(
             ["workspace_id", "content_id"],
             ["contents.workspace_id", "contents.id"],

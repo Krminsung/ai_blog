@@ -383,6 +383,14 @@ class QualityAssessment(UUIDPrimaryKeyMixin, Base):
     __tablename__ = "quality_assessments"
     __table_args__ = (
         UniqueConstraint("workspace_id", "id", name="quality_assessment_workspace_id"),
+        UniqueConstraint(
+            "workspace_id",
+            "id",
+            "content_id",
+            "content_version_id",
+            "content_hash",
+            name="quality_assessment_exact_identity",
+        ),
         ForeignKeyConstraint(
             ["workspace_id", "content_id"],
             ["contents.workspace_id", "contents.id"],
@@ -577,6 +585,14 @@ class ApprovalRequest(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "content_approval_requests"
     __table_args__ = (
         UniqueConstraint("workspace_id", "id", name="approval_request_workspace_id"),
+        UniqueConstraint(
+            "workspace_id",
+            "id",
+            "content_id",
+            "content_version_id",
+            "content_hash",
+            name="approval_request_exact_identity",
+        ),
         ForeignKeyConstraint(
             ["workspace_id", "content_id"],
             ["contents.workspace_id", "contents.id"],

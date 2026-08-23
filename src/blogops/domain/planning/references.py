@@ -97,6 +97,13 @@ class SQLAlchemyPlanningReferenceResolver:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
+    async def brand_snapshot(
+        self, workspace_id: UUID, brand_id: UUID | None
+    ) -> dict[str, Any] | None:
+        """Expose the canonical current-brand snapshot to downstream domains."""
+
+        return await self._brand(workspace_id, brand_id)
+
     async def workspace_policy(self, workspace_id: UUID) -> WorkspacePolicySnapshot:
         workspace = await self._session.scalar(
             select(Workspace).where(
