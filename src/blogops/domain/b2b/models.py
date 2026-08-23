@@ -241,7 +241,7 @@ class ClientProvisioningRequest(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         UniqueConstraint(
             "workspace_id", "requested_by", "idempotency_key", name="b2b_provisioning_idempotency"
         ),
-        CheckConstraint("lock_version > 0", name="b2b_provisioning_lock_positive"),
+        CheckConstraint("lock_version > 0", name="lock_positive"),
         Index("ix_b2b_provisioning_state", "workspace_id", "state", "created_at"),
     )
 
@@ -276,8 +276,8 @@ class AgencyCreditAllocationPolicy(UUIDPrimaryKeyMixin, Base):
         UniqueConstraint(
             "workspace_id", "agency_client_id", "version", name="b2b_allocation_policy_version"
         ),
-        CheckConstraint("version > 0", name="b2b_allocation_policy_version_positive"),
-        CheckConstraint("monthly_credit_limit >= 0", name="b2b_allocation_limit_nonnegative"),
+        CheckConstraint("version > 0", name="version_positive"),
+        CheckConstraint("monthly_credit_limit >= 0", name="limit_nonnegative"),
         Index("ix_b2b_allocation_policy_effective", "workspace_id", "effective_at"),
     )
 
@@ -336,8 +336,8 @@ class AgencyCostAllocationRecord(UUIDPrimaryKeyMixin, Base):
             "source_usage_record_id",
             name="b2b_cost_allocation_source",
         ),
-        CheckConstraint("credit_amount >= 0", name="b2b_cost_allocation_credit_nonnegative"),
-        CheckConstraint("internal_cost >= 0", name="b2b_cost_allocation_cost_nonnegative"),
+        CheckConstraint("credit_amount >= 0", name="credit_nonnegative"),
+        CheckConstraint("internal_cost >= 0", name="cost_nonnegative"),
         Index("ix_b2b_cost_allocation_client", "workspace_id", "agency_client_id", "occurred_at"),
     )
 

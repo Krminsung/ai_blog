@@ -471,13 +471,13 @@ class CreditHoldAllocation(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             "grant_id",
             name="billing_credit_allocation_grant",
         ),
-        CheckConstraint("held_amount > 0", name="billing_credit_allocation_positive"),
-        CheckConstraint("allocation_order > 0", name="billing_credit_allocation_order_positive"),
-        CheckConstraint("consumed_amount >= 0", name="billing_credit_allocation_consumed"),
-        CheckConstraint("released_amount >= 0", name="billing_credit_allocation_released"),
+        CheckConstraint("held_amount > 0", name="positive"),
+        CheckConstraint("allocation_order > 0", name="order_positive"),
+        CheckConstraint("consumed_amount >= 0", name="consumed_nonnegative"),
+        CheckConstraint("released_amount >= 0", name="released_nonnegative"),
         CheckConstraint(
             "consumed_amount + released_amount <= held_amount",
-            name="billing_credit_allocation_capacity",
+            name="capacity",
         ),
     )
 

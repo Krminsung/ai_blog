@@ -93,10 +93,10 @@ class ApiRateLimitPolicy(UUIDPrimaryKeyMixin, Base):
             "workspace_id", "scope_kind", "scope_ref", "endpoint_pattern", "version",
             name="developer_rate_policy_version",
         ),
-        CheckConstraint("version > 0", name="developer_rate_policy_version_positive"),
-        CheckConstraint("request_limit > 0", name="developer_rate_policy_limit_positive"),
-        CheckConstraint("window_seconds > 0", name="developer_rate_policy_window_positive"),
-        CheckConstraint("burst >= 0", name="developer_rate_policy_burst_nonnegative"),
+        CheckConstraint("version > 0", name="version_positive"),
+        CheckConstraint("request_limit > 0", name="limit_positive"),
+        CheckConstraint("window_seconds > 0", name="window_positive"),
+        CheckConstraint("burst >= 0", name="burst_nonnegative"),
         Index("ix_developer_rate_policy_active", "workspace_id", "active_from", "active_until"),
     )
 
@@ -173,11 +173,11 @@ class WebhookEndpoint(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __table_args__ = (
         UniqueConstraint("workspace_id", "id", name="developer_webhook_endpoint_workspace_id"),
         UniqueConstraint("workspace_id", "normalized_url", name="developer_webhook_endpoint_url"),
-        CheckConstraint("failure_count >= 0", name="developer_webhook_failures_nonnegative"),
+        CheckConstraint("failure_count >= 0", name="failures_nonnegative"),
         CheckConstraint(
-            "failure_disable_threshold > 0", name="developer_webhook_disable_threshold_positive"
+            "failure_disable_threshold > 0", name="disable_threshold_positive"
         ),
-        CheckConstraint("lock_version > 0", name="developer_webhook_endpoint_lock_positive"),
+        CheckConstraint("lock_version > 0", name="lock_positive"),
         Index("ix_developer_webhook_endpoint_state", "workspace_id", "state"),
     )
 
@@ -246,17 +246,17 @@ class WebhookDelivery(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             "event_id",
             name="developer_webhook_delivery_once",
         ),
-        CheckConstraint("attempt_count >= 0", name="developer_webhook_attempts_nonnegative"),
+        CheckConstraint("attempt_count >= 0", name="attempts_nonnegative"),
         CheckConstraint(
-            "cycle_attempt_count >= 0", name="developer_webhook_cycle_attempts_nonnegative"
+            "cycle_attempt_count >= 0", name="cycle_attempts_nonnegative"
         ),
-        CheckConstraint("max_attempts > 0", name="developer_webhook_max_attempts_positive"),
-        CheckConstraint("manual_replay_count >= 0", name="developer_webhook_replays_nonnegative"),
+        CheckConstraint("max_attempts > 0", name="max_attempts_positive"),
+        CheckConstraint("manual_replay_count >= 0", name="replays_nonnegative"),
         CheckConstraint(
             "manual_replay_limit >= 0",
-            name="developer_webhook_replay_limit_nonnegative",
+            name="replay_limit_nonnegative",
         ),
-        CheckConstraint("lock_version > 0", name="developer_webhook_delivery_lock_positive"),
+        CheckConstraint("lock_version > 0", name="lock_positive"),
         Index("ix_developer_webhook_delivery_claim", "state", "next_attempt_at", "created_at"),
     )
 
@@ -298,10 +298,10 @@ class WebhookDeliveryAttempt(UUIDPrimaryKeyMixin, Base):
             "attempt_no",
             name="developer_webhook_attempt_no",
         ),
-        CheckConstraint("attempt_no > 0", name="developer_webhook_attempt_positive"),
-        CheckConstraint("delivery_cycle >= 0", name="developer_webhook_cycle_nonnegative"),
-        CheckConstraint("cycle_attempt_no > 0", name="developer_webhook_cycle_attempt_positive"),
-        CheckConstraint("duration_ms >= 0", name="developer_webhook_duration_nonnegative"),
+        CheckConstraint("attempt_no > 0", name="attempt_positive"),
+        CheckConstraint("delivery_cycle >= 0", name="cycle_nonnegative"),
+        CheckConstraint("cycle_attempt_no > 0", name="cycle_attempt_positive"),
+        CheckConstraint("duration_ms >= 0", name="duration_nonnegative"),
         Index("ix_developer_webhook_attempt_delivery", "workspace_id", "delivery_id", "attempt_no"),
     )
 

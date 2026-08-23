@@ -39,7 +39,7 @@ class SupportAccessRequest(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             name="admin_support_access_idempotency",
         ),
         CheckConstraint("requested_minutes > 0", name="admin_support_minutes_positive"),
-        CheckConstraint("lock_version > 0", name="admin_support_access_lock_positive"),
+        CheckConstraint("lock_version > 0", name="lock_positive"),
         Index("ix_admin_support_access_state", "state", "expires_at", "created_at"),
     )
 
@@ -211,7 +211,7 @@ class FeatureFlagVersion(UUIDPrimaryKeyMixin, Base):
             ondelete="RESTRICT",
         ),
         UniqueConstraint("flag_key", "version", name="admin_feature_flag_version"),
-        CheckConstraint("version > 0", name="admin_feature_flag_version_positive"),
+        CheckConstraint("version > 0", name="version_positive"),
         CheckConstraint(
             "rollout_percent >= 0 AND rollout_percent <= 100",
             name="admin_feature_flag_rollout",
@@ -291,7 +291,7 @@ class NotificationTemplateVersion(UUIDPrimaryKeyMixin, Base):
             "version",
             name="notification_template_version",
         ),
-        CheckConstraint("version > 0", name="notification_template_version_positive"),
+        CheckConstraint("version > 0", name="version_positive"),
         Index("ix_notification_template_effective", "event_type", "channel", "effective_at"),
     )
 
@@ -327,7 +327,7 @@ class NotificationPreference(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             "digest_hour IS NULL OR digest_hour BETWEEN 0 AND 23",
             name="notification_digest_hour",
         ),
-        CheckConstraint("lock_version > 0", name="notification_preference_lock_positive"),
+        CheckConstraint("lock_version > 0", name="lock_positive"),
     )
 
     workspace_id: Mapped[UUID] = mapped_column(nullable=False, index=True)
@@ -400,8 +400,8 @@ class NotificationDelivery(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             "channel",
             name="notification_delivery_channel",
         ),
-        CheckConstraint("attempt_count >= 0", name="notification_delivery_attempts_nonnegative"),
-        CheckConstraint("max_attempts > 0", name="notification_delivery_max_attempts_positive"),
+        CheckConstraint("attempt_count >= 0", name="attempts_nonnegative"),
+        CheckConstraint("max_attempts > 0", name="max_attempts_positive"),
         Index("ix_notification_delivery_queue", "state", "next_attempt_at", "created_at"),
     )
 
