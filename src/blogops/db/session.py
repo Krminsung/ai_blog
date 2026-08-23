@@ -105,3 +105,17 @@ async def get_platform_session(
         async with session.begin():
             await apply_platform_scope(session, principal.subject_id)
             yield session
+
+
+async def get_job_session(
+    principal: Annotated[Principal, Depends(get_principal)],
+) -> AsyncIterator[AsyncSession]:
+    """Open a tenant session that also exposes platform jobs to trusted operators."""
+
+    database = get_database()
+    async with database.session_factory() as session:
+        async with session.begin():
+            await apply_workspace_scope(session, principal.workspace_id)
+            if principal.permissions.intersection(_PLATFORM_SESSION_PERMISSIONS):
+                await apply_platform_scope(session, principal.subject_id)
+            yield session

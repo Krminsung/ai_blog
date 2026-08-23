@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from blogops.core.context import Principal
 from blogops.core.errors import AppError
 from blogops.core.permissions import Permission, get_principal
-from blogops.db.session import get_tenant_session
+from blogops.db.session import get_job_session
 from blogops.domain.analytics.enums import AnalyticsCommandKind
 from blogops.domain.analytics.models import AnalyticsReportRun, AnalyticsSyncRun
 from blogops.domain.analytics.schemas import JobCommandCreate as AnalyticsJobCommandCreate
@@ -44,6 +44,11 @@ from blogops.domain.media.models import MediaOperationJob
 from blogops.domain.media.schemas import MediaJobCommandRequest
 from blogops.domain.media.service import MediaService
 from blogops.domain.media.tasks import enqueue_media_operation
+from blogops.domain.operations.models import (
+    BackupRun,
+    GAAssessment,
+    RecoveryExercise,
+)
 from blogops.domain.publishing.models import PublishJob, PublishingConnectionJob
 from blogops.domain.publishing.references import SQLAlchemyPublishingReadinessResolver
 from blogops.domain.publishing.schemas import CancelPublishCreate, RetryPublishCreate
@@ -57,9 +62,10 @@ from blogops.domain.repurpose.schemas import (
 from blogops.domain.repurpose.service import RepurposeService
 from blogops.domain.repurpose.tasks import enqueue_repurpose_job
 from blogops.domain.research.models import ResearchRun
+from blogops.domain.security.models import CopyrightCase, PrivacyRequest, RetentionSweep
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
-TenantSession = Annotated[AsyncSession, Depends(get_tenant_session)]
+JobSession = Annotated[AsyncSession, Depends(get_job_session)]
 AuthenticatedPrincipal = Annotated[Principal, Depends(get_principal)]
 OptionalIdempotencyKey = Annotated[
     str | None,
@@ -80,6 +86,12 @@ ResolvedJob = (
     | PaymentCommand
     | ClientProvisioningRequest
     | WebhookDelivery
+    | RetentionSweep
+    | PrivacyRequest
+    | CopyrightCase
+    | BackupRun
+    | RecoveryExercise
+    | GAAssessment
 )
 
 
@@ -104,6 +116,33 @@ def _require(principal: Principal, permission: Permission) -> None:
             status_code=403,
             fields=[{"path": "permissions", "reason": permission.value}],
         )
+
+
+def _authorize_stage9_job(
+    principal: Principal, kind: str, job: ResolvedJob
+) -> bool:
+    if kind == "PRIVACY_REQUEST" and isinstance(job, PrivacyRequest):
+        if (
+            job.requested_by != principal.subject_id
+            and Permission.PRIVACY_READ.value not in principal.permissions
+        ):
+            raise AppError("PERMISSION_DENIED", "이 작업을 조회할 권한이 없습니다.", 403)
+        return True
+    if kind == "COPYRIGHT_CASE" and isinstance(job, CopyrightCase):
+        if (
+            job.reported_by != principal.subject_id
+            and Permission.SECURITY_READ.value not in principal.permissions
+        ):
+            raise AppError("PERMISSION_DENIED", "이 작업을 조회할 권한이 없습니다.", 403)
+        return True
+    if kind == "RETENTION_SWEEP":
+        _require(principal, Permission.PRIVACY_READ)
+        return True
+    if kind in {"BACKUP_RUN", "RECOVERY_EXERCISE", "GA_ASSESSMENT"}:
+        if "platform:operate" not in principal.permissions:
+            raise AppError("PERMISSION_DENIED", "플랫폼 작업 조회 권한이 없습니다.", 403)
+        return True
+    return False
 
 
 async def _resolve_job(
@@ -193,6 +232,31 @@ async def _resolve_job(
             WebhookDelivery.id == job_id,
         )
     )
+    retention_sweep = await session.scalar(
+        select(RetentionSweep).where(
+            RetentionSweep.workspace_id == principal.workspace_id,
+            RetentionSweep.id == job_id,
+        )
+    )
+    privacy_request = await session.scalar(
+        select(PrivacyRequest).where(
+            PrivacyRequest.workspace_id == principal.workspace_id,
+            PrivacyRequest.id == job_id,
+        )
+    )
+    copyright_case = await session.scalar(
+        select(CopyrightCase).where(
+            CopyrightCase.workspace_id == principal.workspace_id,
+            CopyrightCase.id == job_id,
+        )
+    )
+    backup_run = await session.scalar(select(BackupRun).where(BackupRun.id == job_id))
+    recovery_exercise = await session.scalar(
+        select(RecoveryExercise).where(RecoveryExercise.id == job_id)
+    )
+    ga_assessment = await session.scalar(
+        select(GAAssessment).where(GAAssessment.id == job_id)
+    )
     matches = [
         ("KEYWORD_RESEARCH", keyword_job),
         ("KNOWLEDGE", knowledge_job),
@@ -208,6 +272,12 @@ async def _resolve_job(
         ("PAYMENT_COMMAND", payment_command),
         ("CLIENT_PROVISIONING", provisioning_request),
         ("WEBHOOK_DELIVERY", webhook_delivery),
+        ("RETENTION_SWEEP", retention_sweep),
+        ("PRIVACY_REQUEST", privacy_request),
+        ("COPYRIGHT_CASE", copyright_case),
+        ("BACKUP_RUN", backup_run),
+        ("RECOVERY_EXERCISE", recovery_exercise),
+        ("GA_ASSESSMENT", ga_assessment),
     ]
     found = [(kind, job) for kind, job in matches if job is not None]
     if not found:
@@ -223,6 +293,81 @@ async def _resolve_job(
 
 
 def _view(kind: str, job: ResolvedJob) -> JobView:
+    if isinstance(job, RetentionSweep):
+        return JobView(
+            job_id=job.id,
+            kind=kind,
+            state=job.state,
+            attempt=0,
+            error_code=job.failure_code,
+            result={"policy_version_id": str(job.policy_version_id)},
+            created_at=job.created_at,
+            updated_at=job.updated_at,
+            finished_at=job.completed_at,
+        )
+    if isinstance(job, PrivacyRequest):
+        return JobView(
+            job_id=job.id,
+            kind=kind,
+            state=job.state,
+            attempt=0,
+            error_code=job.failure_code or job.rejection_code,
+            result={"request_kind": job.kind},
+            created_at=job.created_at,
+            updated_at=job.updated_at,
+            finished_at=job.completed_at,
+        )
+    if isinstance(job, CopyrightCase):
+        return JobView(
+            job_id=job.id,
+            kind=kind,
+            state=job.state,
+            attempt=0,
+            error_code=job.failure_code,
+            result=None,
+            created_at=job.created_at,
+            updated_at=job.updated_at,
+            finished_at=job.resolved_at,
+        )
+    if isinstance(job, BackupRun):
+        return JobView(
+            job_id=job.id,
+            kind=kind,
+            state=job.state,
+            attempt=job.attempt_count,
+            error_code=job.failure_code,
+            result={"policy_version_id": str(job.policy_version_id)},
+            created_at=job.created_at,
+            updated_at=job.updated_at,
+            finished_at=job.completed_at,
+        )
+    if isinstance(job, RecoveryExercise):
+        return JobView(
+            job_id=job.id,
+            kind=kind,
+            state=job.state,
+            attempt=0,
+            error_code=job.failure_code,
+            result={"backup_evidence_id": str(job.backup_evidence_id)},
+            created_at=job.created_at,
+            updated_at=job.updated_at,
+            finished_at=job.completed_at,
+        )
+    if isinstance(job, GAAssessment):
+        return JobView(
+            job_id=job.id,
+            kind=kind,
+            state=job.state,
+            attempt=0,
+            error_code=job.failure_code,
+            result={
+                "release_ref": job.release_ref,
+                "decision_hash": job.decision_hash,
+            },
+            created_at=job.created_at,
+            updated_at=job.updated_at,
+            finished_at=job.verified_at,
+        )
     if isinstance(job, PaymentCommand):
         return JobView(
             job_id=job.id,
@@ -437,10 +582,12 @@ def _publishing_service(session: AsyncSession) -> PublishingService:
 @router.get("/{job_id}", response_model=JobView)
 async def get_job(
     job_id: UUID,
-    session: TenantSession,
+    session: JobSession,
     principal: AuthenticatedPrincipal,
 ) -> JobView:
     kind, job = await _resolve_job(session, principal, job_id)
+    if _authorize_stage9_job(principal, kind, job):
+        return _view(kind, job)
     permission = {
         "KEYWORD_RESEARCH": Permission.KEYWORD_READ,
         "KNOWLEDGE": Permission.KNOWLEDGE_READ,
@@ -465,11 +612,12 @@ async def get_job(
 async def cancel_job(
     job_id: UUID,
     background_tasks: BackgroundTasks,
-    session: TenantSession,
+    session: JobSession,
     principal: AuthenticatedPrincipal,
     idempotency_key: OptionalIdempotencyKey = None,
 ) -> JobView:
     kind, job = await _resolve_job(session, principal, job_id)
+    _authorize_stage9_job(principal, kind, job)
     if kind == "ANALYTICS_SYNC" and isinstance(job, AnalyticsSyncRun):
         _require(principal, Permission.CONTENT_WRITE)
         if idempotency_key is None:
@@ -645,11 +793,12 @@ async def cancel_job(
 async def retry_job(
     job_id: UUID,
     background_tasks: BackgroundTasks,
-    session: TenantSession,
+    session: JobSession,
     principal: AuthenticatedPrincipal,
     idempotency_key: OptionalIdempotencyKey = None,
 ) -> JobView:
     kind, job = await _resolve_job(session, principal, job_id)
+    _authorize_stage9_job(principal, kind, job)
     if kind == "ANALYTICS_SYNC" and isinstance(job, AnalyticsSyncRun):
         _require(principal, Permission.CONTENT_WRITE)
         if idempotency_key is None:

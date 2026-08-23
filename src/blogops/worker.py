@@ -32,5 +32,7 @@ celery_app.conf.update(
         "blogops.domain.developer.tasks",
         "blogops.domain.research.tasks",
         "blogops.domain.repurpose.tasks",
+        "blogops.domain.security.tasks",
+        "blogops.domain.operations.tasks",
     ),
 )

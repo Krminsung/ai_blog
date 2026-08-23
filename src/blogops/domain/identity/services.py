@@ -2613,7 +2613,7 @@ def _new_workspace_bundle(
         lockout_seconds=int(LOGIN_LOCKOUT.total_seconds()),
         access_token_ttl_seconds=int(DEFAULT_ACCESS_TTL.total_seconds()),
         session_ttl_seconds=int(DEFAULT_SESSION_TTL.total_seconds()),
-        require_mfa_role_keys=[],
+        require_mfa_role_keys=["owner", "admin"],
         password_login_enabled=True,
         sso_enforced_domains=[],
     )

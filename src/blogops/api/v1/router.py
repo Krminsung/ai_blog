@@ -15,11 +15,13 @@ from blogops.api.v1.jobs import router as jobs_router
 from blogops.api.v1.keywords import router as keywords_router
 from blogops.api.v1.knowledge import router as knowledge_router
 from blogops.api.v1.media import router as media_router
+from blogops.api.v1.operations import router as operations_router, status_router
 from blogops.api.v1.planning import router as planning_router
 from blogops.api.v1.publishing import router as publishing_router
 from blogops.api.v1.quality import router as quality_router
 from blogops.api.v1.repurpose import router as repurpose_router
 from blogops.api.v1.research import router as research_router
+from blogops.api.v1.security import router as security_router
 from blogops.domain.identity.dependencies import get_current_principal
 
 router = APIRouter()
@@ -41,6 +43,9 @@ router.include_router(usage_router, dependencies=[Depends(get_current_principal)
 router.include_router(developer_router, dependencies=[Depends(get_current_principal)])
 router.include_router(b2b_router, dependencies=[Depends(get_current_principal)])
 router.include_router(admin_router, dependencies=[Depends(get_current_principal)])
+router.include_router(security_router, dependencies=[Depends(get_current_principal)])
+router.include_router(operations_router, dependencies=[Depends(get_current_principal)])
+router.include_router(status_router)
 router.include_router(jobs_router, dependencies=[Depends(get_current_principal)])
 
 

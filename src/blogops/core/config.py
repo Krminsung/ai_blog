@@ -69,6 +69,7 @@ class Settings(BaseSettings):
     idempotency_lock_seconds: int = 120
     outbox_batch_size: int = 100
     payment_webhook_max_bytes: int = 1024 * 1024
+    security_webhook_max_bytes: int = 1024 * 1024
 
     @field_validator("database_url")
     @classmethod
@@ -89,6 +90,13 @@ class Settings(BaseSettings):
     def validate_payment_webhook_max_bytes(cls, value: int) -> int:
         if value <= 0:
             raise ValueError("BLOGOPS_PAYMENT_WEBHOOK_MAX_BYTES must be positive")
+        return value
+
+    @field_validator("security_webhook_max_bytes")
+    @classmethod
+    def validate_security_webhook_max_bytes(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("BLOGOPS_SECURITY_WEBHOOK_MAX_BYTES must be positive")
         return value
 
     @model_validator(mode="after")

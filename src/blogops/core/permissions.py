@@ -42,6 +42,10 @@ class Permission(StrEnum):
     AGENCY_READ = "agency:read"
     AGENCY_MANAGE = "agency:manage"
     PORTAL_MANAGE = "portal:manage"
+    PRIVACY_READ = "privacy:read"
+    PRIVACY_MANAGE = "privacy:manage"
+    SECURITY_READ = "security:read"
+    SECURITY_MANAGE = "security:manage"
 
 
 def get_principal(request: Request) -> Principal:
