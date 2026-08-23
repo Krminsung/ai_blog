@@ -74,6 +74,7 @@ class ProductLinkKind(StrEnum):
 class Brand(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "brands"
     __table_args__ = (
+        UniqueConstraint("workspace_id", "id", name="brand_workspace_id"),
         UniqueConstraint("workspace_id", "name", name="brand_workspace_name"),
         CheckConstraint("status IN ('ACTIVE', 'INACTIVE')", name="brand_status"),
         CheckConstraint("lock_version > 0", name="brand_lock_version_positive"),
