@@ -38,7 +38,11 @@ def decode_spreadsheet_text(content: bytes) -> tuple[str, str]:
 
     if not content:
         raise AppError("BULK_INPUT_EMPTY", "CSV 파일이 비어 있습니다.", 422)
-    for encoding in ("utf-8-sig", "utf-16", "cp949"):
+    encodings = ["utf-8-sig"]
+    if content.startswith((b"\xff\xfe", b"\xfe\xff")):
+        encodings.append("utf-16")
+    encodings.append("cp949")
+    for encoding in encodings:
         try:
             return content.decode(encoding), encoding
         except UnicodeError:

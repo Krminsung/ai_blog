@@ -53,7 +53,7 @@ class MediaProviderConnection(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ),
         CheckConstraint(
             "consecutive_failures >= 0",
-            name="media_provider_failures_nonnegative",
+            name="provider_failures_nonnegative",
         ),
         Index("ix_media_provider_state", "workspace_id", "state"),
     )
@@ -471,7 +471,7 @@ class MediaOperationJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         CheckConstraint("max_attempts > 0", name="media_job_max_attempts_positive"),
         CheckConstraint(
             "NOT provider_quota_released OR provider_quota_reserved",
-            name="media_job_quota_release_requires_reservation",
+            name="quota_release_requires_reservation",
         ),
         Index("ix_media_job_state", "workspace_id", "state", "created_at"),
     )

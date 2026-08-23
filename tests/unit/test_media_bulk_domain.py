@@ -191,6 +191,15 @@ def test_csv_preview_handles_excel_encoding_masks_pii_and_has_no_thousand_row_ca
     assert cp949_preview.encoding == "cp949"
     assert cp949_preview.total_rows == 1
 
+    utf16_preview = preview_csv(
+        "keyword,title\nutf16,excel".encode("utf-16"),
+        column_mapping={"keyword": "keyword", "title": "title"},
+        required_variables=("keyword", "title"),
+        preview_limit=10,
+    )
+    assert utf16_preview.encoding == "utf-16"
+    assert utf16_preview.total_rows == 1
+
 
 def test_bulk_scale_target_is_policy_driven_not_a_hard_product_maximum() -> None:
     validate_row_capacity(1_000, entitled_limit=None)
