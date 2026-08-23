@@ -31,6 +31,7 @@ from blogops.domain.repurpose.rules import (
     validate_policy_bundle,
     validate_variant,
 )
+from blogops.domain.repurpose.schemas import RepurposeJobCreate
 from blogops.domain.repurpose.service import (
     _finalize_cancelled_job,
     _reset_items_for_retry,
@@ -38,6 +39,12 @@ from blogops.domain.repurpose.service import (
 from blogops.domain.repurpose.tasks import (
     _is_retryable_runtime_error as repurpose_failure_is_retryable,
 )
+
+
+def test_repurpose_job_schema_preserves_model_config_api_name() -> None:
+    properties = RepurposeJobCreate.model_json_schema(by_alias=True)["properties"]
+    assert "model_config" in properties
+    assert "generation_config" not in properties
 
 
 def test_all_fourteen_repurpose_formats_have_requirement_lineage() -> None:

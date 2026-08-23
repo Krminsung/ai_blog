@@ -92,8 +92,8 @@ class PublishingConnectionJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             "idempotency_key",
             name="publishing_connection_job_idempotency",
         ),
-        CheckConstraint("attempt >= 0", name="publishing_connection_attempt_nonnegative"),
-        CheckConstraint("max_attempts > 0", name="publishing_connection_max_attempts_positive"),
+        CheckConstraint("attempt >= 0", name="attempt_nonnegative"),
+        CheckConstraint("max_attempts > 0", name="max_attempts_positive"),
         Index("ix_publishing_connection_job_state", "workspace_id", "state", "created_at"),
     )
 

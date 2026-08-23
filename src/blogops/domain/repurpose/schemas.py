@@ -79,12 +79,14 @@ class RepurposeItemCreate(BaseModel):
 
 
 class RepurposeJobCreate(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     operation: RepurposeJobOperation
     items: list[RepurposeItemCreate] = Field(min_length=1)
     model_provider: str = Field(min_length=1, max_length=120)
     model_name: str = Field(min_length=1, max_length=160)
     model_version: str = Field(min_length=1, max_length=120)
-    model_config: dict[str, Any]
+    generation_config: dict[str, Any] = Field(alias="model_config")
     estimated_cost: Decimal = Field(ge=0)
     budget_currency: str = Field(min_length=3, max_length=3)
 

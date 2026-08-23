@@ -74,7 +74,7 @@ class ChannelTemplateVersion(UUIDPrimaryKeyMixin, Base):
         UniqueConstraint(
             "workspace_id", "template_id", "version", name="repurpose_template_version_no"
         ),
-        CheckConstraint("version > 0", name="repurpose_template_version_positive"),
+        CheckConstraint("version > 0", name="version_positive"),
         Index(
             "ix_repurpose_template_version_status", "workspace_id", "template_id", "status"
         ),

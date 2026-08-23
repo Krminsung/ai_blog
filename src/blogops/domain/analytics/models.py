@@ -70,7 +70,7 @@ class AnalyticsMetricDefinition(UUIDPrimaryKeyMixin, Base):
     __table_args__ = (
         UniqueConstraint("workspace_id", "id", name="analytics_metric_workspace_id"),
         UniqueConstraint("workspace_id", "key", "version", name="analytics_metric_version"),
-        CheckConstraint("version > 0", name="analytics_metric_version_positive"),
+        CheckConstraint("version > 0", name="version_positive"),
         Index("ix_analytics_metric_effective", "workspace_id", "key", "effective_at"),
     )
 
@@ -244,6 +244,7 @@ class ContentMetricDailyFact(UUIDPrimaryKeyMixin, Base):
         ForeignKeyConstraint(
             ["workspace_id", "evidence_batch_id"],
             ["analytics_evidence_batches.workspace_id", "analytics_evidence_batches.id"],
+            name="fk_anl_content_fact_evidence",
             ondelete="RESTRICT",
             use_alter=True,
         ),
@@ -253,7 +254,7 @@ class ContentMetricDailyFact(UUIDPrimaryKeyMixin, Base):
         CheckConstraint(
             "(provider_call_id IS NOT NULL AND evidence_batch_id IS NULL) OR "
             "(provider_call_id IS NULL AND evidence_batch_id IS NOT NULL)",
-            name="analytics_content_fact_one_evidence",
+            name="one_evidence",
         ),
         Index("ix_analytics_content_fact_day", "workspace_id", "content_id", "fact_date"),
     )
@@ -302,6 +303,7 @@ class ChannelMetricDailyFact(UUIDPrimaryKeyMixin, Base):
         ForeignKeyConstraint(
             ["workspace_id", "evidence_batch_id"],
             ["analytics_evidence_batches.workspace_id", "analytics_evidence_batches.id"],
+            name="fk_anl_channel_fact_evidence",
             ondelete="RESTRICT",
             use_alter=True,
         ),
@@ -311,7 +313,7 @@ class ChannelMetricDailyFact(UUIDPrimaryKeyMixin, Base):
         CheckConstraint(
             "(provider_call_id IS NOT NULL AND evidence_batch_id IS NULL) OR "
             "(provider_call_id IS NULL AND evidence_batch_id IS NOT NULL)",
-            name="analytics_channel_fact_one_evidence",
+            name="one_evidence",
         ),
         Index("ix_analytics_channel_fact_day", "workspace_id", "channel", "fact_date"),
     )
@@ -360,6 +362,7 @@ class QueryMetricDailyFact(UUIDPrimaryKeyMixin, Base):
         ForeignKeyConstraint(
             ["workspace_id", "evidence_batch_id"],
             ["analytics_evidence_batches.workspace_id", "analytics_evidence_batches.id"],
+            name="fk_anl_query_fact_evidence",
             ondelete="RESTRICT",
             use_alter=True,
         ),
@@ -369,7 +372,7 @@ class QueryMetricDailyFact(UUIDPrimaryKeyMixin, Base):
         CheckConstraint(
             "(provider_call_id IS NOT NULL AND evidence_batch_id IS NULL) OR "
             "(provider_call_id IS NULL AND evidence_batch_id IS NOT NULL)",
-            name="analytics_query_fact_one_evidence",
+            name="one_evidence",
         ),
         Index("ix_analytics_query_fact_day", "workspace_id", "query_hash", "fact_date"),
     )
@@ -505,11 +508,11 @@ class ConversionEvent(UUIDPrimaryKeyMixin, Base):
             "workspace_id", "source", "external_event_id", name="analytics_conversion_source"
         ),
         CheckConstraint(
-            "amount IS NULL OR amount >= 0", name="analytics_conversion_amount_nonnegative"
+            "amount IS NULL OR amount >= 0", name="amount_nonnegative"
         ),
         CheckConstraint(
             "currency IS NULL OR char_length(currency) = 3",
-            name="analytics_conversion_currency_length",
+            name="currency_length",
         ),
         Index("ix_analytics_conversion_content", "workspace_id", "content_id", "occurred_at"),
     )
@@ -593,8 +596,8 @@ class ContentROISnapshot(UUIDPrimaryKeyMixin, Base):
             "workspace_id", "content_id", "period_start", "period_end", "snapshot_hash",
             name="analytics_roi_key",
         ),
-        CheckConstraint("production_cost >= 0", name="analytics_roi_cost_nonnegative"),
-        CheckConstraint("char_length(currency) = 3", name="analytics_roi_currency_length"),
+        CheckConstraint("production_cost >= 0", name="cost_nonnegative"),
+        CheckConstraint("char_length(currency) = 3", name="currency_length"),
     )
 
     workspace_id: Mapped[UUID] = mapped_column(nullable=False, index=True)
@@ -627,7 +630,7 @@ class AnalyticsComparisonSnapshot(UUIDPrimaryKeyMixin, Base):
             "workspace_id", "comparison_kind", "scope_hash", "snapshot_hash",
             name="analytics_compare_key",
         ),
-        CheckConstraint("sample_size >= 0", name="analytics_compare_sample_nonnegative"),
+        CheckConstraint("sample_size >= 0", name="sample_nonnegative"),
     )
 
     workspace_id: Mapped[UUID] = mapped_column(nullable=False, index=True)
@@ -765,7 +768,7 @@ class AnalyticsExperimentResult(UUIDPrimaryKeyMixin, Base):
         UniqueConstraint(
             "workspace_id", "experiment_id", "result_hash", name="analytics_exp_result_hash"
         ),
-        CheckConstraint("sample_size >= 0", name="analytics_exp_result_sample_nonnegative"),
+        CheckConstraint("sample_size >= 0", name="sample_nonnegative"),
     )
 
     workspace_id: Mapped[UUID] = mapped_column(nullable=False, index=True)
@@ -789,7 +792,7 @@ class AnalyticsReportDefinition(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __table_args__ = (
         UniqueConstraint("workspace_id", "id", name="analytics_report_def_workspace_id"),
         UniqueConstraint("workspace_id", "name", name="analytics_report_def_name"),
-        CheckConstraint("lock_version > 0", name="analytics_report_def_lock_positive"),
+        CheckConstraint("lock_version > 0", name="lock_positive"),
         Index("ix_analytics_reports_due", "workspace_id", "enabled", "next_run_at"),
     )
 
@@ -856,7 +859,7 @@ class AnalyticsReportRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             "workspace_id", "requested_by", "operation", "idempotency_key",
             name="analytics_report_run_idempotency",
         ),
-        CheckConstraint("attempt >= 0", name="analytics_report_run_attempt_nonnegative"),
+        CheckConstraint("attempt >= 0", name="attempt_nonnegative"),
         Index("ix_analytics_report_run_state", "workspace_id", "state", "created_at"),
     )
 
@@ -892,7 +895,7 @@ class AnalyticsReportArtifact(UUIDPrimaryKeyMixin, Base):
         UniqueConstraint(
             "workspace_id", "report_run_id", "format", name="analytics_report_artifact_format"
         ),
-        CheckConstraint("size_bytes >= 0", name="analytics_report_artifact_size_nonnegative"),
+        CheckConstraint("size_bytes >= 0", name="size_nonnegative"),
     )
 
     workspace_id: Mapped[UUID] = mapped_column(nullable=False, index=True)

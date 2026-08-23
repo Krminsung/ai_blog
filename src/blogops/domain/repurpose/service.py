@@ -143,7 +143,7 @@ class RepurposeService:
             .order_by(ChannelTemplateVersion.version.desc())
             .limit(1)
         )
-        payload = data.model_dump(mode="json")
+        payload = data.model_dump(mode="json", by_alias=True)
         policy_payload = {
             "platform": data.platform_policy,
             "disclosure": data.disclosure_policy,
@@ -196,7 +196,7 @@ class RepurposeService:
         repo = RepurposeRepository(self.session, principal.workspace_id)
         payload = data.model_dump(mode="json")
         request_hash = canonical_json_hash(payload)
-        ensure_secret_free_config(data.model_config)
+        ensure_secret_free_config(data.generation_config)
         existing = await repo.idempotent_job(
             principal.subject_id, data.operation.value, idempotency_key
         )
@@ -320,7 +320,7 @@ class RepurposeService:
             model_provider=data.model_provider,
             model_name=data.model_name,
             model_version=data.model_version,
-            model_config_hash=canonical_json_hash(data.model_config),
+            model_config_hash=canonical_json_hash(data.generation_config),
         )
         self.session.add(job)
         await self.session.flush()
