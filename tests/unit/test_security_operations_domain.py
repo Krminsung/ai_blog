@@ -5,11 +5,13 @@ from uuid import uuid4
 
 import pytest
 from pydantic import ValidationError
+from sqlalchemy import event
 
 from blogops.api.router import api_router
 from blogops.core.errors import AppError
 from blogops.core.permissions import Permission
 from blogops.domain.operations.enums import GAGate, HealthStatus
+from blogops.domain.operations.models import ServiceComponent, _service_component_frozen
 from blogops.domain.operations.providers import FailClosedOperationsAdapters
 from blogops.domain.operations.rules import (
     ensure_incident_transition,
@@ -392,6 +394,14 @@ def test_stage9_worker_tasks_and_permission_vocabulary_are_registered() -> None:
     assert Permission.PRIVACY_MANAGE.value == "privacy:manage"
     assert Permission.SECURITY_READ.value == "security:read"
     assert Permission.SECURITY_MANAGE.value == "security:manage"
+
+
+def test_service_component_identity_fields_are_frozen_after_insert() -> None:
+    assert event.contains(
+        ServiceComponent,
+        "before_update",
+        _service_component_frozen,
+    )
 
 
 def test_stage9_public_and_authenticated_routes_have_distinct_boundaries() -> None:

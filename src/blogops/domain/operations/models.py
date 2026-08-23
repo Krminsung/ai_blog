@@ -471,6 +471,20 @@ def _reject_frozen_operations_fields(target: object, names: tuple[str, ...]) -> 
         )
 
 
+@event.listens_for(ServiceComponent, "before_update")
+def _service_component_frozen(
+    _mapper: object, _connection: object, target: ServiceComponent
+) -> None:
+    _reject_frozen_operations_fields(
+        target,
+        (
+            "component_key",
+            "kind",
+            "created_by",
+        ),
+    )
+
+
 @event.listens_for(OperationalIncident, "before_update")
 def _operations_incident_frozen(
     _mapper: object, _connection: object, target: OperationalIncident
