@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
@@ -12,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from blogops.core.context import Principal, request_id_context
 from blogops.core.errors import AppError
+from blogops.core.retries import deterministic_jittered_delay
 from blogops.db.session import apply_workspace_scope
 from blogops.domain.admin.enums import (
     AdminApprovalDecision,
@@ -68,10 +68,13 @@ def _notification_retry_delay(
         return None
     if base <= 0 or maximum < base or not 0 <= jitter_ratio <= 1:
         return None
-    delay = min(maximum, base * (2 ** max(0, attempt_no - 1)))
-    digest = int(hashlib.sha256(f"{seed}:{attempt_no}".encode()).hexdigest()[:8], 16)
-    unit = digest / 0xFFFFFFFF
-    return max(1, round(delay * (1 - jitter_ratio + 2 * jitter_ratio * unit)))
+    return deterministic_jittered_delay(
+        base_seconds=base,
+        maximum_seconds=maximum,
+        jitter_ratio=jitter_ratio,
+        attempt_no=attempt_no,
+        seed=seed,
+    )
 
 
 class AdminService:

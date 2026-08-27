@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from blogops.core.context import Principal
 from blogops.core.errors import AppError
+from blogops.core.retries import capped_exponential_delay
 from blogops.domain.keywords.clustering import (
     ClusterCandidate,
     TECHNICAL_MAX_CLUSTER_CANDIDATES,
@@ -1332,7 +1333,11 @@ async def process_research_job(
         if explicit:
             delay = max(explicit)
         else:
-            base_delay = min(3_600, 5 * (2 ** max(0, job.attempt - 1)))
+            base_delay = capped_exponential_delay(
+                base_seconds=5,
+                maximum_seconds=3_600,
+                exponent=job.attempt - 1,
+            )
             delay = max(1, int(random.SystemRandom().uniform(0.8, 1.2) * base_delay))
         job.retry_after_seconds = delay
         job.next_retry_at = datetime.now(UTC) + timedelta(seconds=delay)
