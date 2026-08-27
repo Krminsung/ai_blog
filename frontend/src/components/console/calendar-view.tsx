@@ -9,6 +9,7 @@ import { ErrorState, Skeleton } from "@/components/ui/feedback";
 import { Card } from "@/components/ui/surface";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/cn";
+import { downloadResponse } from "@/lib/browser-download";
 import { planning } from "@/lib/api/endpoints";
 import { errorMessage } from "@/lib/api/errors";
 import { DISPLAY_TIME_ZONE } from "@/lib/env";
@@ -86,13 +87,10 @@ export function CalendarView() {
         kind === "ics"
           ? await planning.exportCalendarIcs(range.start, range.end)
           : await planning.exportCalendarCsv(range.start, range.end);
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = `calendar-${cursor.year}-${String(cursor.month + 1).padStart(2, "0")}.${kind}`;
-      anchor.click();
-      URL.revokeObjectURL(url);
+      await downloadResponse(
+        response,
+        `calendar-${cursor.year}-${String(cursor.month + 1).padStart(2, "0")}.${kind}`,
+      );
     } catch (error) {
       notify(errorMessage(error), "critical");
     }
