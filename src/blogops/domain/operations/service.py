@@ -68,19 +68,16 @@ from blogops.domain.security.rules import (
     redact_safe_metadata,
     redact_safe_text,
 )
+from blogops.services.advisory_locks import (
+    acquire_creation_guard,
+    creation_guard_key,
+)
 from blogops.services.audit import append_audit_log
 from blogops.services.outbox import add_outbox_event
 
 _SCHEMA_VERSION = "1.0"
 _RETRY_EXHAUSTED_PREFIX = "RETRY_EXHAUSTED:"
-
-
-def _creation_guard_key(namespace: str, *identity: object) -> str:
-    """Build an unambiguous, stable key for a creation transaction lock."""
-    digest = canonical_json_hash(
-        {"namespace": namespace, "identity": list(identity)}
-    )
-    return f"blogops:stage9:create:{namespace}:{digest}"
+_creation_guard_key = creation_guard_key
 
 
 def _stored_attempt_error(code: str, *, retry_exhausted: bool) -> str:
@@ -104,13 +101,7 @@ class OperationsService:
     async def _lock_creation_guard(
         self, namespace: str, *identity: object
     ) -> None:
-        await self._session.execute(
-            text(
-                "SELECT pg_advisory_xact_lock("
-                "hashtextextended(:guard_key, 0))"
-            ),
-            {"guard_key": _creation_guard_key(namespace, *identity)},
-        )
+        await acquire_creation_guard(self._session, namespace, *identity)
 
     async def _record(
         self,
