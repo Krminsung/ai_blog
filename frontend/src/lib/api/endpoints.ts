@@ -8,6 +8,17 @@
 import { api, apiRaw, newIdempotencyKey, type Query } from "@/lib/api/client";
 import type * as T from "@/lib/api/types";
 
+function idempotentPost<TResponse>(
+  path: string,
+  body: unknown,
+): Promise<TResponse> {
+  return api<TResponse>(path, {
+    method: "POST",
+    body,
+    idempotencyKey: newIdempotencyKey(),
+  });
+}
+
 /** Consent record required at signup and whenever terms are re-issued. */
 export interface TermsAcceptance {
   document_type: string;
@@ -242,19 +253,14 @@ export const knowledge = {
     api<T.KnowledgeSourceList>("/v1/knowledge/sources", { query }),
   get: (id: string) => api<T.KnowledgeSource>(`/v1/knowledge/sources/${id}`),
   create: (body: Record<string, unknown>) =>
-    api<T.KnowledgeSource>("/v1/knowledge/sources", {
-      method: "POST",
-      body,
-      idempotencyKey: newIdempotencyKey(),
-    }),
+    idempotentPost<T.KnowledgeSource>("/v1/knowledge/sources", body),
   remove: (id: string) =>
     api<void>(`/v1/knowledge/sources/${id}`, { method: "DELETE" }),
   sync: (id: string) =>
-    api<Record<string, unknown>>(`/v1/knowledge/sources/${id}/sync`, {
-      method: "POST",
-      body: {},
-      idempotencyKey: newIdempotencyKey(),
-    }),
+    idempotentPost<Record<string, unknown>>(
+      `/v1/knowledge/sources/${id}/sync`,
+      {},
+    ),
   versions: (id: string) =>
     api<Record<string, unknown>[]>(`/v1/knowledge/sources/${id}/versions`),
   search: (query: Query) =>
@@ -274,11 +280,7 @@ export const keywords = {
   setIntent: (id: string, body: Record<string, unknown>) =>
     api<T.Keyword>(`/v1/keywords/${id}/intent`, { method: "PATCH", body }),
   research: (body: Record<string, unknown>) =>
-    api<Record<string, unknown>>("/v1/keywords/research", {
-      method: "POST",
-      body,
-      idempotencyKey: newIdempotencyKey(),
-    }),
+    idempotentPost<Record<string, unknown>>("/v1/keywords/research", body),
   job: (jobId: string) =>
     api<Record<string, unknown>>(`/v1/keywords/jobs/${jobId}`),
   jobItems: (jobId: string, query?: Query) =>
@@ -423,11 +425,7 @@ export const content = {
     }),
 
   createJob: (body: Record<string, unknown>) =>
-    api<T.ContentJob>("/v1/content-jobs", {
-      method: "POST",
-      body,
-      idempotencyKey: newIdempotencyKey(),
-    }),
+    idempotentPost<T.ContentJob>("/v1/content-jobs", body),
   job: (jobId: string) => api<T.ContentJob>(`/v1/content-jobs/${jobId}`),
   jobSteps: (jobId: string) =>
     api<Record<string, unknown>[]>(`/v1/content-jobs/${jobId}/steps`),
@@ -504,11 +502,7 @@ export const approvals = {
   decisions: (id: string) =>
     api<Record<string, unknown>[]>(`/v1/approvals/${id}/decisions`),
   decide: (id: string, body: Record<string, unknown>) =>
-    api<T.ApprovalRequest>(`/v1/approvals/${id}/decisions`, {
-      method: "POST",
-      body,
-      idempotencyKey: newIdempotencyKey(),
-    }),
+    idempotentPost<T.ApprovalRequest>(`/v1/approvals/${id}/decisions`, body),
   proof: (id: string) => api<Record<string, unknown>>(`/v1/approvals/${id}/proof`),
   invalidateForContent: (contentId: string, body: Record<string, unknown>) =>
     api<Record<string, unknown>>(
@@ -536,17 +530,9 @@ export const media = {
   restore: (id: string, body: Record<string, unknown>) =>
     api<T.MediaAsset>(`/v1/media/assets/${id}/restore`, { method: "POST", body }),
   requestUpload: (body: Record<string, unknown>) =>
-    api<Record<string, unknown>>("/v1/media/uploads", {
-      method: "POST",
-      body,
-      idempotencyKey: newIdempotencyKey(),
-    }),
+    idempotentPost<Record<string, unknown>>("/v1/media/uploads", body),
   createOperation: (body: Record<string, unknown>) =>
-    api<Record<string, unknown>>("/v1/media/operations", {
-      method: "POST",
-      body,
-      idempotencyKey: newIdempotencyKey(),
-    }),
+    idempotentPost<Record<string, unknown>>("/v1/media/operations", body),
   job: (jobId: string) => api<Record<string, unknown>>(`/v1/media/jobs/${jobId}`),
   cancelJob: (jobId: string) =>
     api<Record<string, unknown>>(`/v1/media/jobs/${jobId}/cancel`, {
@@ -572,11 +558,10 @@ export const publishing = {
   connection: (id: string) =>
     api<T.PublishingConnection>(`/v1/publishing/connections/${id}`),
   createConnection: (body: Record<string, unknown>) =>
-    api<T.PublishingConnection>("/v1/publishing/connections", {
-      method: "POST",
+    idempotentPost<T.PublishingConnection>(
+      "/v1/publishing/connections",
       body,
-      idempotencyKey: newIdempotencyKey(),
-    }),
+    ),
   diagnoseConnection: (id: string) =>
     api<Record<string, unknown>>(`/v1/publishing/connections/${id}/diagnose`, {
       method: "POST",
@@ -616,22 +601,17 @@ export const publishing = {
     }),
 
   publish: (contentId: string, body: Record<string, unknown>) =>
-    api<T.PublishJob>(`/v1/content/${contentId}/publish`, {
-      method: "POST",
-      body,
-      idempotencyKey: newIdempotencyKey(),
-    }),
+    idempotentPost<T.PublishJob>(`/v1/content/${contentId}/publish`, body),
   preview: (contentId: string, body: Record<string, unknown>) =>
     api<Record<string, unknown>>(`/v1/content/${contentId}/publishing-preview`, {
       method: "POST",
       body,
     }),
   createNaverPackage: (contentId: string, body: Record<string, unknown>) =>
-    api<T.NaverPackage>(`/v1/content/${contentId}/naver-package`, {
-      method: "POST",
+    idempotentPost<T.NaverPackage>(
+      `/v1/content/${contentId}/naver-package`,
       body,
-      idempotencyKey: newIdempotencyKey(),
-    }),
+    ),
 
   posts: (query?: Query) => api<T.PublishedPost[]>("/v1/published-posts", { query }),
   post: (id: string) => api<T.PublishedPost>(`/v1/published-posts/${id}`),
@@ -693,11 +673,7 @@ export const analytics = {
       { method: "POST", body },
     ),
   startSync: (body: Record<string, unknown>) =>
-    api<Record<string, unknown>>("/v1/analytics/sync-runs", {
-      method: "POST",
-      body,
-      idempotencyKey: newIdempotencyKey(),
-    }),
+    idempotentPost<Record<string, unknown>>("/v1/analytics/sync-runs", body),
   syncRun: (id: string) =>
     api<Record<string, unknown>>(`/v1/analytics/sync-runs/${id}`),
   reportRun: (id: string) =>
@@ -708,9 +684,9 @@ export const analytics = {
       body,
     }),
   runReport: (definitionId: string, body: Record<string, unknown>) =>
-    api<Record<string, unknown>>(
+    idempotentPost<Record<string, unknown>>(
       `/v1/analytics/report-definitions/${definitionId}/runs`,
-      { method: "POST", body, idempotencyKey: newIdempotencyKey() },
+      body,
     ),
   roiSnapshot: (body: Record<string, unknown>) =>
     api<Record<string, unknown>>("/v1/analytics/roi-snapshots", {
@@ -727,11 +703,7 @@ export const bulk = {
   rows: (id: string, query?: Query) =>
     api<Record<string, unknown>>(`/v1/bulk/jobs/${id}/rows`, { query }),
   create: (body: Record<string, unknown>) =>
-    api<T.BulkJob>("/v1/bulk/jobs", {
-      method: "POST",
-      body,
-      idempotencyKey: newIdempotencyKey(),
-    }),
+    idempotentPost<T.BulkJob>("/v1/bulk/jobs", body),
   pause: (id: string) =>
     api<T.BulkJob>(`/v1/bulk/jobs/${id}/pause`, { method: "POST", body: {} }),
   resume: (id: string) =>
@@ -767,11 +739,7 @@ export const repurpose = {
   createTemplate: (body: Record<string, unknown>) =>
     api<T.ChannelTemplate>("/v1/repurpose/templates", { method: "POST", body }),
   createJob: (body: Record<string, unknown>) =>
-    api<Record<string, unknown>>("/v1/repurpose/jobs", {
-      method: "POST",
-      body,
-      idempotencyKey: newIdempotencyKey(),
-    }),
+    idempotentPost<Record<string, unknown>>("/v1/repurpose/jobs", body),
   job: (id: string) => api<Record<string, unknown>>(`/v1/repurpose/jobs/${id}`),
   jobItems: (id: string) =>
     api<Record<string, unknown>[]>(`/v1/repurpose/jobs/${id}/items`),
@@ -800,23 +768,14 @@ export const billing = {
     api<Record<string, unknown>>("/v1/billing/usage", { query }),
   usageRecords: (query?: Query) => api<T.UsageRecord[]>("/v1/usage", { query }),
   subscribe: (body: Record<string, unknown>) =>
-    api<Record<string, unknown>>("/v1/billing/subscribe", {
-      method: "POST",
-      body,
-      idempotencyKey: newIdempotencyKey(),
-    }),
+    idempotentPost<Record<string, unknown>>("/v1/billing/subscribe", body),
   changePlan: (body: Record<string, unknown>) =>
-    api<Record<string, unknown>>("/v1/billing/change-plan", {
-      method: "POST",
-      body,
-      idempotencyKey: newIdempotencyKey(),
-    }),
+    idempotentPost<Record<string, unknown>>("/v1/billing/change-plan", body),
   purchaseCredits: (body: Record<string, unknown>) =>
-    api<Record<string, unknown>>("/v1/billing/credits/purchase", {
-      method: "POST",
+    idempotentPost<Record<string, unknown>>(
+      "/v1/billing/credits/purchase",
       body,
-      idempotencyKey: newIdempotencyKey(),
-    }),
+    ),
 };
 
 /* --------------------------------------------------------------- developer */
@@ -894,11 +853,7 @@ export const privacy = {
   request: (id: string) =>
     api<Record<string, unknown>>(`/v1/privacy/requests/${id}`),
   createRequest: (body: Record<string, unknown>) =>
-    api<Record<string, unknown>>("/v1/privacy/requests", {
-      method: "POST",
-      body,
-      idempotencyKey: newIdempotencyKey(),
-    }),
+    idempotentPost<Record<string, unknown>>("/v1/privacy/requests", body),
   retentionPolicies: () =>
     api<Record<string, unknown>[]>("/v1/privacy/retention-policies"),
   legalHolds: (query?: Query) =>

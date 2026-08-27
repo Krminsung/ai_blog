@@ -16,6 +16,7 @@ import { Card, CardBody, CardHeader } from "@/components/ui/surface";
 import { Mono } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/cn";
+import { downloadResponse } from "@/lib/browser-download";
 import { content as contentApi, research } from "@/lib/api/endpoints";
 import { errorMessage } from "@/lib/api/errors";
 import { formatDateTime, formatNumber, shortHash } from "@/lib/format";
@@ -65,13 +66,7 @@ export function ContentDetail({ contentId }: { contentId: string }) {
       const response = await contentApi.exportContent(contentId, {
         format: "markdown",
       });
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = `${item.data?.title ?? "content"}.md`;
-      anchor.click();
-      URL.revokeObjectURL(url);
+      await downloadResponse(response, `${item.data?.title ?? "content"}.md`);
     } catch (error) {
       notify(errorMessage(error), "critical");
     }
