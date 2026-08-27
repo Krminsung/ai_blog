@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from blogops.core.context import Principal
 from blogops.core.errors import AppError
-from blogops.core.permissions import Permission, get_principal, require_permissions
+from blogops.core.permissions import Permission, require_permission_value, require_permissions
 from blogops.db.session import get_session, get_tenant_session
 from blogops.domain.billing.providers import (
     FailClosedPaymentGateway,
@@ -42,16 +42,10 @@ TenantSession = Annotated[AsyncSession, Depends(get_tenant_session)]
 UnscopedSession = Annotated[AsyncSession, Depends(get_session)]
 BillingReader = Annotated[Principal, Depends(require_permissions(Permission.BILLING_READ))]
 BillingManager = Annotated[Principal, Depends(require_permissions(Permission.BILLING_MANAGE))]
-
-
-def require_meter_permission(
-    request_principal: Annotated[Principal, Depends(get_principal)],
-) -> Principal:
-    if "billing:meter" not in request_principal.permissions:
-        raise AppError("PERMISSION_DENIED", "사용량 확정 권한이 없습니다.", 403)
-    return request_principal
-
-
+require_meter_permission = require_permission_value(
+    "billing:meter",
+    message="사용량 확정 권한이 없습니다.",
+)
 BillingMeter = Annotated[Principal, Depends(require_meter_permission)]
 
 

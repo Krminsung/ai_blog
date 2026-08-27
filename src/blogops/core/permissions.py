@@ -59,6 +59,22 @@ def get_principal(request: Request) -> Principal:
     return principal
 
 
+def require_permission_value(
+    value: str,
+    *,
+    message: str = "이 작업을 수행할 권한이 없습니다.",
+) -> Callable[[Request], Principal]:
+    """Require one permission that is not necessarily part of the public enum."""
+
+    def dependency(request: Request) -> Principal:
+        principal = get_principal(request)
+        if value not in principal.permissions:
+            raise AppError("PERMISSION_DENIED", message, 403)
+        return principal
+
+    return dependency
+
+
 def require_permissions(*required: Permission) -> Callable[[Request], Principal]:
     required_values = frozenset(item.value for item in required)
 
