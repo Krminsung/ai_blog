@@ -106,12 +106,14 @@ async function authorizationHeader(): Promise<string | null> {
   return `Bearer ${session.access_token}`;
 }
 
-/** Issue one request, optionally retrying once after a token refresh. */
-async function send(
-  path: string,
+function serializeRequestBody(body: unknown): BodyInit | undefined {
+  if (body === undefined) return undefined;
+  return body instanceof FormData ? body : JSON.stringify(body);
+}
+
+async function requestHeaders(
   options: RequestOptions,
-  allowRetry: boolean,
-): Promise<Response> {
+): Promise<Record<string, string>> {
   const headers: Record<string, string> = {
     Accept: "application/json",
     ...options.headers,
@@ -127,15 +129,26 @@ async function send(
     if (authorization) headers.Authorization = authorization;
   }
 
+  return headers;
+}
+
+async function parseSuccess<T>(response: Response): Promise<T> {
+  if (response.status === 204) return undefined as T;
+  const text = await response.text();
+  if (!text) return undefined as T;
+  return JSON.parse(text) as T;
+}
+
+/** Issue one request, optionally retrying once after a token refresh. */
+async function send(
+  path: string,
+  options: RequestOptions,
+  allowRetry: boolean,
+): Promise<Response> {
   const response = await fetch(buildUrl(path, options.query), {
     method: options.method ?? "GET",
-    headers,
-    body:
-      options.body === undefined
-        ? undefined
-        : options.body instanceof FormData
-          ? options.body
-          : JSON.stringify(options.body),
+    headers: await requestHeaders(options),
+    body: serializeRequestBody(options.body),
     signal: options.signal,
     cache: "no-store",
   });
@@ -158,10 +171,7 @@ export async function api<T>(
 ): Promise<T> {
   const response = await send(path, options, true);
   if (!response.ok) throw await parseError(response);
-  if (response.status === 204) return undefined as T;
-  const text = await response.text();
-  if (!text) return undefined as T;
-  return JSON.parse(text) as T;
+  return parseSuccess<T>(response);
 }
 
 /** Request that returns the raw response — used for file/CSV/ICS downloads. */

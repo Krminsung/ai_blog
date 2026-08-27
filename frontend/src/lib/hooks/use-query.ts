@@ -59,6 +59,22 @@ interface MutationState {
   fieldErrors: Record<string, string>;
 }
 
+function mutationState(isPending = false): MutationState {
+  return {
+    isPending,
+    error: null,
+    fieldErrors: {},
+  };
+}
+
+function mutationFailureState(error: unknown): MutationState {
+  return {
+    isPending: false,
+    error: errorMessage(error),
+    fieldErrors: error instanceof ApiError ? error.fieldErrors() : {},
+  };
+}
+
 /**
  * Imperative writes with the error shape forms need: a top-level message plus
  * per-field reasons pulled out of the backend's `fields` array.
@@ -66,35 +82,24 @@ interface MutationState {
 export function useMutation<TArgs extends unknown[], TResult>(
   action: (...args: TArgs) => Promise<TResult>,
 ) {
-  const [state, setState] = useState<MutationState>({
-    isPending: false,
-    error: null,
-    fieldErrors: {},
-  });
+  const [state, setState] = useState<MutationState>(() => mutationState());
 
   const run = useCallback(
     async (...args: TArgs): Promise<TResult | null> => {
-      setState({ isPending: true, error: null, fieldErrors: {} });
+      setState(mutationState(true));
       try {
         const result = await action(...args);
-        setState({ isPending: false, error: null, fieldErrors: {} });
+        setState(mutationState());
         return result;
       } catch (error) {
-        setState({
-          isPending: false,
-          error: errorMessage(error),
-          fieldErrors: error instanceof ApiError ? error.fieldErrors() : {},
-        });
+        setState(mutationFailureState(error));
         return null;
       }
     },
     [action],
   );
 
-  const reset = useCallback(
-    () => setState({ isPending: false, error: null, fieldErrors: {} }),
-    [],
-  );
+  const reset = useCallback(() => setState(mutationState()), []);
 
   return { ...state, run, reset };
 }
