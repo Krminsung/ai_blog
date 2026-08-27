@@ -2,26 +2,14 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
 from blogops.core.errors import AppError
+from blogops.core.serialization import canonical_json_hash as canonical_hash
 from blogops.domain.billing.enums import CreditHoldState, LedgerDirection, OveragePolicy
-
-
-def canonical_hash(value: dict[str, Any]) -> str:
-    payload = json.dumps(
-        value,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-        default=str,
-    )
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def require_positive_amount(value: Decimal, *, field: str = "amount") -> Decimal:

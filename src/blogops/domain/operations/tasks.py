@@ -9,6 +9,7 @@ from uuid import UUID
 from celery import shared_task
 
 from blogops.core.errors import AppError
+from blogops.core.retries import capped_exponential_delay
 from blogops.db.session import get_database
 from blogops.domain.operations.providers import (
     BackupController,
@@ -59,7 +60,7 @@ def _is_retryable_operations_error(error: Exception) -> bool:
 
 
 def _retry_delay(retries: int) -> int:
-    return min(300, 5 * (2 ** max(0, retries)))
+    return capped_exponential_delay(base_seconds=5, maximum_seconds=300, exponent=retries)
 
 
 def configure_operations_runtime(

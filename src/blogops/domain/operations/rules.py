@@ -2,31 +2,19 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
 from blogops.core.errors import AppError
+from blogops.core.serialization import canonical_json_hash
 from blogops.domain.operations.enums import (
     GAGate,
     HealthStatus,
     OperationalIncidentState,
 )
 from blogops.domain.security.rules import is_sha256_hex
-
-
-def canonical_json_hash(value: Any) -> str:
-    encoded = json.dumps(
-        value,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-        default=str,
-    )
-    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
 def validate_backup_policy(

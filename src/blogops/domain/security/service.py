@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from blogops.core.context import Principal, request_id_context
@@ -99,18 +99,16 @@ from blogops.domain.security.schemas import (
     SecurityIncidentNotify,
     SubprocessorVersionCreate,
 )
+from blogops.services.advisory_locks import (
+    acquire_creation_guard,
+    acquire_transaction_advisory_lock,
+    creation_guard_key,
+)
 from blogops.services.audit import append_audit_log
 from blogops.services.outbox import add_outbox_event
 
 _SCHEMA_VERSION = "1.0"
-
-
-def _creation_guard_key(namespace: str, *identity: object) -> str:
-    """Build an unambiguous, stable key for a creation transaction lock."""
-    digest = canonical_json_hash(
-        {"namespace": namespace, "identity": list(identity)}
-    )
-    return f"blogops:stage9:create:{namespace}:{digest}"
+_creation_guard_key = creation_guard_key
 
 
 def _same_request(existing_hash: str, request_hash: str) -> None:
@@ -132,32 +130,20 @@ class SecurityService:
     async def _lock_creation_guard(
         self, namespace: str, *identity: object
     ) -> None:
-        await self._session.execute(
-            text(
-                "SELECT pg_advisory_xact_lock("
-                "hashtextextended(:guard_key, 0))"
-            ),
-            {"guard_key": _creation_guard_key(namespace, *identity)},
-        )
+        await acquire_creation_guard(self._session, namespace, *identity)
 
     async def _lock_legal_hold_guard(self, workspace_id: UUID) -> None:
-        await self._session.execute(
-            text(
-                "SELECT pg_advisory_xact_lock("
-                "hashtextextended(:guard_key, 0))"
-            ),
-            {"guard_key": f"security-legal-hold:{workspace_id}"},
+        await acquire_transaction_advisory_lock(
+            self._session,
+            f"security-legal-hold:{workspace_id}",
         )
 
     async def _lock_consent_guard(
         self, workspace_id: UUID, subject_id: UUID, purpose: str
     ) -> None:
-        await self._session.execute(
-            text(
-                "SELECT pg_advisory_xact_lock("
-                "hashtextextended(:guard_key, 0))"
-            ),
-            {"guard_key": f"security-consent:{workspace_id}:{subject_id}:{purpose}"},
+        await acquire_transaction_advisory_lock(
+            self._session,
+            f"security-consent:{workspace_id}:{subject_id}:{purpose}",
         )
 
     async def _record(

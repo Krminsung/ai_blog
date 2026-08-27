@@ -1,6 +1,5 @@
 """Platform health, incident, backup, recovery, and GA-readiness APIs."""
 
-from collections.abc import Callable
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -8,8 +7,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Header, Response, statu
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from blogops.core.context import Principal
-from blogops.core.errors import AppError
-from blogops.core.permissions import get_principal
+from blogops.core.permissions import require_permission_value
 from blogops.db.session import get_platform_session, get_session
 from blogops.domain.operations.providers import (
     ComponentHealthProbe,
@@ -55,16 +53,6 @@ PlatformSession = Annotated[AsyncSession, Depends(get_platform_session)]
 IdempotencyKey = Annotated[
     str, Header(alias="Idempotency-Key", min_length=8, max_length=255)
 ]
-
-
-def require_permission_value(value: str) -> Callable[[Principal], Principal]:
-    def dependency(principal: Annotated[Principal, Depends(get_principal)]) -> Principal:
-        if value not in principal.permissions:
-            raise AppError("PERMISSION_DENIED", "이 작업을 수행할 권한이 없습니다.", 403)
-        return principal
-
-    return dependency
-
 
 PlatformOperator = Annotated[Principal, Depends(require_permission_value("platform:operate"))]
 PlatformApprover = Annotated[Principal, Depends(require_permission_value("platform:approve"))]

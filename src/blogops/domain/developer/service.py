@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-import json
 import re
 from datetime import UTC, datetime, timedelta
 from fnmatch import fnmatchcase
@@ -17,6 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from blogops.core.context import Principal, PrincipalKind
 from blogops.core.errors import AppError
+from blogops.core.retries import deterministic_jittered_delay
+from blogops.core.serialization import canonical_json_hash as _canonical_hash
 from blogops.db.session import apply_workspace_scope
 from blogops.domain.developer.enums import (
     ApiKeyState,
@@ -69,17 +70,6 @@ _SENSITIVE_PREVIEW_KEYS = frozenset(
 )
 
 
-def _canonical_hash(value: Any) -> str:
-    payload = json.dumps(
-        value,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-        default=str,
-    )
-    return hashlib.sha256(payload.encode()).hexdigest()
-
-
 def _mask_preview(value: Any, key: str | None = None) -> Any:
     if key:
         normalized = key.casefold().replace("-", "_").replace(".", "_")
@@ -101,10 +91,13 @@ def _retry_delay(policy: dict[str, Any], *, attempt_no: int, seed: str) -> int:
     jitter_ratio = float(policy["jitter_ratio"])
     if base <= 0 or maximum < base or not 0 <= jitter_ratio <= 1:
         raise AppError("WEBHOOK_RETRY_POLICY_INVALID", "Webhook 재시도 정책이 올바르지 않습니다.", 503)
-    delay = min(maximum, base * (2 ** max(0, attempt_no - 1)))
-    digest = int(hashlib.sha256(f"{seed}:{attempt_no}".encode()).hexdigest()[:8], 16)
-    unit = digest / 0xFFFFFFFF
-    return max(1, round(delay * (1 - jitter_ratio + 2 * jitter_ratio * unit)))
+    return deterministic_jittered_delay(
+        base_seconds=base,
+        maximum_seconds=maximum,
+        jitter_ratio=jitter_ratio,
+        attempt_no=attempt_no,
+        seed=seed,
+    )
 
 
 class DeveloperService:

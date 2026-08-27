@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-import json
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
@@ -14,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from blogops.core.context import Principal
 from blogops.core.errors import AppError
+from blogops.core.serialization import canonical_json_hash as _canonical_hash
 from blogops.db.session import apply_workspace_scope
 from blogops.domain.b2b.enums import (
     AgencyClientState,
@@ -55,17 +55,6 @@ from blogops.services.audit import append_audit_log
 from blogops.services.outbox import add_outbox_event
 
 _SCHEMA_VERSION = "1.0"
-
-
-def _canonical_hash(value: Any) -> str:
-    payload = json.dumps(
-        value,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-        default=str,
-    )
-    return hashlib.sha256(payload.encode()).hexdigest()
 
 
 class B2BService:
