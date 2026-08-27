@@ -4,14 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
-import hashlib
-import json
 import re
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from blogops.core.errors import AppError
+from blogops.core.serialization import canonical_json_hash as canonical_hash
 from blogops.domain.publishing.enums import RetryClass
 
 
@@ -33,17 +32,6 @@ SECRET_ASSIGNMENT_PATTERN = re.compile(
 )
 _POST_ID = re.compile(r"^[0-9]{1,20}$")
 _NAVER_BLOG_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,48}[A-Za-z0-9]$")
-
-
-def canonical_hash(payload: object) -> str:
-    encoded = json.dumps(
-        payload,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-        default=str,
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
 
 
 def redact_metadata(value: Any) -> Any:

@@ -4,11 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
-import hashlib
-import json
 from typing import Mapping
 from uuid import UUID
 
+from blogops.core.serialization import canonical_json_hash
 from blogops.domain.quality.enums import (
     ApprovalDecisionKind,
     ApprovalRequestStatus,
@@ -107,17 +106,6 @@ APPROVAL_TRANSITIONS: dict[
         ApprovalRequestStatus.PENDING
     ),
 }
-
-
-def canonical_json_hash(payload: object) -> str:
-    encoded = json.dumps(
-        payload,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-        default=str,
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
 
 
 def calculate_quality_score(

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import ipaddress
-import json
 import secrets
 from dataclasses import dataclass
 from decimal import Decimal
@@ -12,14 +11,8 @@ from typing import Any, Mapping, Sequence
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from blogops.core.errors import AppError
+from blogops.core.serialization import canonical_json_hash
 from blogops.domain.analytics.enums import MetricValueKind
-
-
-def canonical_json_hash(value: Any) -> str:
-    encoded = json.dumps(
-        value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
 
 
 def new_tracking_token() -> tuple[str, str]:

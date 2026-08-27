@@ -6,12 +6,11 @@ must come from an immutable workspace/model policy snapshot so historical runs a
 
 from __future__ import annotations
 
-import hashlib
-import json
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Iterable, Mapping
 
+from blogops.core.serialization import canonical_json_hash
 from blogops.domain.generation.enums import ContentType, GenerationStepKind
 from blogops.domain.jobs.state import JobState
 
@@ -50,17 +49,6 @@ class PlannedStep:
     kind: GenerationStepKind
     ordinal: int
     section_key: str | None = None
-
-
-def canonical_json_hash(payload: Any) -> str:
-    encoded = json.dumps(
-        payload,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-        default=str,
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
 
 
 def content_document_hash(title: str, document: list[dict[str, Any]]) -> str:

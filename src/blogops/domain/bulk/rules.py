@@ -4,25 +4,13 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, Mapping, Sequence
 
 from blogops.core.errors import AppError
-
-
-def canonical_hash(value: Any) -> str:
-    return hashlib.sha256(
-        json.dumps(
-            value,
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-            default=str,
-        ).encode("utf-8")
-    ).hexdigest()
+from blogops.core.serialization import canonical_json_hash as canonical_hash
 
 
 def validate_row_capacity(row_count: int, entitled_limit: int | None) -> None:

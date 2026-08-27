@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
 from blogops.core.errors import AppError
+from blogops.core.serialization import canonical_json_hash
 from blogops.domain.repurpose.enums import RepurposeKind
 
 
@@ -27,13 +26,6 @@ REPURPOSE_REQUIREMENTS: dict[RepurposeKind, str] = {
     RepurposeKind.SUPPORT_SCRIPT: "REP-013",
     RepurposeKind.PRESS_RELEASE_SUMMARY: "REP-014",
 }
-
-
-def canonical_json_hash(value: Any) -> str:
-    encoded = json.dumps(
-        value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
 
 
 def ensure_secret_free_config(config: Mapping[str, Any]) -> None:

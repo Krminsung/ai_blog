@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import hashlib
 import ipaddress
-import json
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime
@@ -12,6 +10,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from blogops.core.errors import AppError
+from blogops.core.serialization import canonical_json_hash
 from blogops.domain.security.enums import (
     CopyrightCaseState,
     DataClass,
@@ -41,17 +40,6 @@ _SENSITIVE_MARKERS = frozenset(
 _EMAIL_PATTERN = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE)
 _PHONE_PATTERN = re.compile(r"(?<!\d)(?:\+?82[- .]?)?0?1[016789](?:[- .]?\d){7,8}(?!\d)")
 _BEARER_PATTERN = re.compile(r"\bBearer\s+[A-Za-z0-9._~+/=-]+", re.IGNORECASE)
-
-
-def canonical_json_hash(value: Any) -> str:
-    payload = json.dumps(
-        value,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-        default=str,
-    )
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def is_sha256_hex(value: object) -> bool:

@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Mapping
 
 from blogops.core.errors import AppError
+from blogops.core.serialization import canonical_json_hash as canonical_hash
 from blogops.domain.media.enums import LicenseState, LicenseType, UsageMode
 
 _SECRET_KEYS = frozenset(
@@ -52,17 +51,6 @@ _MIME_SIGNATURES = {
     "image/webp": (b"RIFF",),
 }
 _SAFE_OBJECT_REF = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/=-]{0,999}$")
-
-
-def canonical_hash(value: Any) -> str:
-    encoded = json.dumps(
-        value,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-        default=str,
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
 
 
 def find_plaintext_secret_paths(value: Any, path: str = "config") -> list[str]:
